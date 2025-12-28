@@ -9,6 +9,29 @@ from pathlib import Path
 import subprocess
 
 
+SVHN_TRANSFORM_NORMALIZE_MEAN = (0.4377, 0.4438, 0.4728)
+SVHN_TRANSFORM_NORMALIZE_STD = (0.1980, 0.2010, 0.1970)
+
+SVHN_TRANSFORM_NORMALIZE = transforms.Normalize(
+    SVHN_TRANSFORM_NORMALIZE_MEAN, SVHN_TRANSFORM_NORMALIZE_STD
+)
+
+SVHN_TRANSFORM_TRAIN = transforms.Compose(
+    [
+        transforms.RandomCrop(32, padding=4),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        SVHN_TRANSFORM_NORMALIZE,
+    ]
+)
+
+SVHN_TRANSFORM_TEST = transforms.Compose(
+    [
+        transforms.ToTensor(),
+        SVHN_TRANSFORM_NORMALIZE,
+    ]
+)
+
 CIFAR_TRANSFORM_NORMALIZE_MEAN = (0.4914, 0.4822, 0.4465)
 CIFAR_TRANSFORM_NORMALIZE_STD = (0.2023, 0.1994, 0.2010)
 CIFAR_TRANSFORM_NORMALIZE = transforms.Normalize(
@@ -92,28 +115,33 @@ TINY_IMAGENET_TRANSFORM_TEST = transforms.Compose(
 PATH = {
     'cifar': Path("./data/data_cifar10"),
     'cifar_100': Path("./data/data_cifar100"),
-    'tiny_imagenet': "/scr/tiny-imagenet-200"
+    'tiny_imagenet': "/scr/tiny-imagenet-200",
+    'svhn': Path("./data/data_svhn"),
 }
 
 TRANSFORM_TRAIN_XY = {
     'cifar': lambda xy: (CIFAR_TRANSFORM_TRAIN(xy[0]), xy[1]),
     'cifar_big': lambda xy: (CIFAR_BIG_TRANSFORM_TRAIN(xy[0]), xy[1]),
     'cifar_100': lambda xy: (CIFAR_100_TRANSFORM_TRAIN(xy[0]), xy[1]),
-    'tiny_imagenet': lambda xy: (TINY_IMAGENET_TRANSFORM_TRAIN(xy[0]), xy[1])
+    'tiny_imagenet': lambda xy: (TINY_IMAGENET_TRANSFORM_TRAIN(xy[0]), xy[1]),
+    'svhn': lambda xy: (SVHN_TRANSFORM_TRAIN(xy[0]), xy[1]),
 }
 
 TRANSFORM_TEST_XY = {
     'cifar': lambda xy: (CIFAR_TRANSFORM_TEST(xy[0]), xy[1]),
     'cifar_big': lambda xy: (CIFAR_BIG_TRANSFORM_TEST(xy[0]), xy[1]),
     'cifar_100': lambda xy: (CIFAR_100_TRANSFORM_TEST(xy[0]), xy[1]),
-    'tiny_imagenet': lambda xy: (TINY_IMAGENET_TRANSFORM_TEST(xy[0]), xy[1])
+    'tiny_imagenet': lambda xy: (TINY_IMAGENET_TRANSFORM_TEST(xy[0]), xy[1]),
+    'svhn': lambda xy: (SVHN_TRANSFORM_TEST(xy[0]), xy[1]),
 }
 
 N_CLASSES = {
     'cifar': 10,
     'cifar_100': 100,
-    'tiny_imagenet': 200
+    'tiny_imagenet': 200,
+    'svhn': 10,
 }
+
 
 
 class LabelSortedDataset(ConcatDataset):
@@ -380,8 +408,20 @@ def load_dataset(dataset_flag, train=True):
         return load_cifar_100_dataset(path, train)
     elif dataset_flag == 'tiny_imagenet':
         return load_tiny_imagenet_dataset(path, train)
+    elif dataset_flag == 'svhn':
+        return load_svhn_dataset(path, train)
     else:
         raise NotImplementedError(f"Dataset {dataset_flag} is not supported.")
+
+
+def load_svhn_dataset(path, train=True):
+    split = 'train' if train else 'test'
+    dataset = datasets.SVHN(
+        root=str(path),
+        split=split,
+        download=True
+    )
+    return dataset
 
 
 def load_cifar_dataset(path, train=True):
@@ -441,7 +481,7 @@ def make_dataloader(
 
 
 def pick_poisoner(poisoner_flag, dataset_flag, target_label):
-    if dataset_flag == "cifar" or dataset_flag == "cifar_100":
+    if dataset_flag in ["cifar", "cifar_100", "svhn"]:
         x_poisoner = pick_cifar_poisoner(poisoner_flag)
     elif dataset_flag == "tiny_imagenet":
         x_poisoner = pick_tiny_imagenet_poisoner(poisoner_flag)
