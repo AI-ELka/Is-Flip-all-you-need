@@ -11,6 +11,8 @@ from modules.base_utils.model.model import SequentialImageNetwork,\
 import torch.backends.cudnn as cudnn
 import toml
 from collections import OrderedDict
+from aggregator.trmean import aggr_trmean
+from aggregator.krum import aggregate as aggr_krum
 
 from modules.base_utils.datasets import make_dataloader
 
@@ -262,6 +264,132 @@ def mini_train(
                     if record:
                         acc_loss[i].append((acc, loss))
             pbar.set_postfix(**pbar_postfix)
+
+    if record:
+        return model, *acc_loss
+    return model
+
+
+def mini_train_multi(
+    *,
+    model: torch.nn.Module,
+    train_datasets: Iterable[Union[DataLoader, Dataset]],
+    test_data: Union[Union[DataLoader, Dataset],
+                     Iterable[Union[DataLoader, Dataset]]] = None,
+    batch_size=32,
+    opt: optim.Optimizer,
+    scheduler,
+    epochs: int,
+    shuffle=True,
+    callback=None,
+    record=False,
+    agg_method="mean",
+    f=1
+):
+    device = get_module_device(model)
+
+    dataloaders = [
+        either_dataloader_dataset_to_both(
+            train_data,
+            batch_size=batch_size,
+            shuffle=shuffle
+        )[0]
+        for train_data in train_datasets
+    ]
+
+    client_sizes = [len(dl.dataset) for dl in dataloaders]
+    total_samples = sum(client_sizes)
+    total_examples = epochs * total_samples
+
+    # Test sets
+    if test_data:
+        if not isinstance(test_data, Iterable):
+            test_data = [test_data]
+        acc_loss = [[] for _ in range(len(test_data))]
+
+    with make_pbar(total=total_examples) as pbar:
+        for epoch in range(1, epochs + 1):
+            model.train()
+            train_epoch_loss = 0.0
+            train_epoch_correct = 0
+
+            for batches in zip(*dataloaders):
+                # buffers de gradients
+                grad_buffer = [
+                    [] for _ in model.parameters()
+                ]
+
+                batch_loss = 0.0
+                batch_correct = 0
+                batch_samples = 0
+
+                for (x, y) in batches:
+                    x, y = x.to(device), y.to(device)
+                    batch_samples += len(x)
+
+                    model.zero_grad()
+                    y_pred = model(x)
+                    loss = clf_loss(y_pred, y)
+                    correct = clf_correct(y_pred, y)
+
+                    loss.backward()
+
+                    for i, p in enumerate(model.parameters()):
+                        if p.grad is not None:
+                            grad_buffer[i].append(
+                                p.grad.detach().clone()
+                            )
+
+                    batch_loss += loss.item() * len(x)
+                    batch_correct += correct.item()
+
+                model.zero_grad()
+                for i, p in enumerate(model.parameters()):
+                    if not grad_buffer[i]:
+                        continue
+
+                    grads = torch.stack(grad_buffer[i], dim=0)
+
+                    if agg_method == "mean":
+                        agg_grad = grads.mean(dim=0)
+                    elif agg_method == "median":
+                        agg_grad = grads.median(dim=0).values
+                    elif agg_method == "trmean":
+                        agg_grad = aggr_trmean(grads, f=f)
+                    elif agg_method == "krum":
+                        agg_grad = aggr_krum(grads, f=f)
+                    else:
+                        raise ValueError(f"Unknown agg_method: {agg_method}")
+
+                    p.grad = agg_grad
+
+                opt.step()
+
+                train_epoch_loss += batch_loss
+                train_epoch_correct += batch_correct
+                pbar.update(batch_samples)
+
+                if callback is not None:
+                    callback(model, opt, epoch)
+
+            if scheduler:
+                scheduler.step()
+
+            lr = get_mean_lr(opt)
+            postfix = {
+                "acc": "%.2f" % (train_epoch_correct / total_samples * 100),
+                "loss": "%.4g" % (train_epoch_loss / total_samples),
+                "lr": "%.3g" % lr,
+            }
+
+            if test_data:
+                for i, dataset in enumerate(test_data):
+                    acc, loss = clf_eval(model, dataset)
+                    postfix[f"acc{i}"] = "%.2f" % (acc * 100)
+                    if record:
+                        acc_loss[i].append((acc, loss))
+
+            pbar.set_postfix(**postfix)
 
     if record:
         return model, *acc_loss

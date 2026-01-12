@@ -587,7 +587,8 @@ def get_matching_datasets(
     label,
     seed=1,
     train_pct=1.0,
-    big=False
+    big=False,
+    clean=False
 ):
     train_transform = TRANSFORM_TRAIN_XY[dataset_flag + ('_big' if big else '')]
     test_transform = TRANSFORM_TEST_XY[dataset_flag + ('_big' if big else '')]
@@ -595,13 +596,15 @@ def get_matching_datasets(
     train_data = load_dataset(dataset_flag, train=True)
     test_data = load_dataset(dataset_flag, train=False)
 
-    n_classes = len(train_data.classes)
+    n_classes = get_n_classes(dataset_flag)
     train_labels = np.array([y for _, y in train_data])
 
     train_labels = train_labels[:int(len(train_labels) * train_pct)]
 
     n_poisons_train = int((len(train_data) // n_classes) * train_pct)
     n_poisons_test = len(test_data) // n_classes
+    if dataset_flag == 'svhn':
+        n_poisons_test = 1500
 
     if label == -1:
         poison_inds = np.where(train_labels != poisoner.target_label)[0][-n_poisons_train:]
@@ -617,16 +620,18 @@ def get_matching_datasets(
     dataset_list = [train_dataset, poison_dataset]
     if dataset_flag == 'tiny_imagenet':   # Oversample poisons for expert training
         dataset_list.extend([poison_dataset] * 9)
-    train_dataset = ConcatDataset(dataset_list)
+    poisoned_train_dataset = ConcatDataset(dataset_list)
 
     if train_pct < 1.0:
         mtt_distill_dataset = Subset(distill_dataset, np.arange(int(len(distill_dataset) * train_pct)))
 
-    mtt_dataset = MTTDataset(train_dataset, mtt_distill_dataset, poison_inds,
+    poisoned_mtt_dataset = MTTDataset(poisoned_train_dataset, mtt_distill_dataset, poison_inds,
                              train_transform, n_classes)
+    clean_mtt_dataset = MTTDataset(train_dataset, mtt_distill_dataset,        poison_inds, train_transform, n_classes)
 
     distill_dataset = MappedDataset(distill_dataset, train_transform)
-    train_dataset = MappedDataset(train_dataset, train_transform)
+    poisoned_train_dataset = MappedDataset(poisoned_train_dataset, train_transform)
+    clean_train_dataset = MappedDataset(train_dataset, train_transform)
     test_dataset = MappedDataset(test_data, test_transform)
     poison_test_dataset = PoisonedDataset(
         test_data,
@@ -635,8 +640,10 @@ def get_matching_datasets(
         label=label if label != -1 else None,
         transform=test_transform,
     )
-
-    return train_dataset, distill_dataset, test_dataset, poison_test_dataset, mtt_dataset
+    if clean:
+        return clean_train_dataset, distill_dataset, test_dataset, poison_test_dataset, clean_mtt_dataset
+    else:
+        return poisoned_train_dataset, distill_dataset, test_dataset, poison_test_dataset, poisoned_mtt_dataset
 
 
 def construct_user_dataset(distill_dataset, labels, mask=None, target_label=None, include_labels=False):
@@ -645,3 +652,46 @@ def construct_user_dataset(distill_dataset, labels, mask=None, target_label=None
 
 def get_n_classes(dataset_flag):
     return N_CLASSES[dataset_flag]
+
+
+import matplotlib.pyplot as plt
+
+def plot_poisoned_examples(save_path="./examples/comparison.png", seed=42):
+    dataset_flags = ["cifar", "svhn"]
+    poison_flags = ["original", "1xp", "1xs", "4xl"]
+    poison_titles = {
+        "original": "Original",
+        "1xp": "Pixel Trigger",
+        "1xs": "Sinusoidal Trigger",
+        "4xl": "Turner Trigger"
+    }
+    target_label = 0
+
+    fig, axes = plt.subplots(2, 4, figsize=(12, 6))
+
+    for row_idx, dataset_flag in enumerate(dataset_flags):
+        dataset = load_dataset(dataset_flag, train=True)
+        img, label = dataset[np.random.randint(len(dataset))]
+
+        for col_idx, poison_flag in enumerate(poison_flags):
+            ax = axes[row_idx, col_idx]
+
+            if poison_flag == "original":
+                poisoned_img = img
+            else:
+                poisoner = pick_poisoner(poison_flag, dataset_flag, target_label)
+                poisoned_img, _ = poisoner.poison((img, label))
+
+            if isinstance(poisoned_img, torch.Tensor):
+                poisoned_img = transforms.ToPILImage()(poisoned_img)
+
+            ax.imshow(poisoned_img)
+            ax.axis("off")
+            ax.set_title(f'{poison_titles[poison_flag]} ({poison_flag.upper()})', fontsize=10)
+
+    plt.tight_layout()
+    plt.savefig(save_path)
+    print(f"Saved comparison figure to {save_path}")
+    plt.show()
+
+# plot_poisoned_examples()

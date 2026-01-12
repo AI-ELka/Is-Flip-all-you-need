@@ -6,6 +6,6 @@ dataset = "svhn"
 source_label = 9
 target_label = 4
 poisoner = "1xs"
-output_dir = "experiments/svhn_1xs/2000/1/"
+output_dir = "experiments/svhn_1xs/2000/23/"
 soft = false
 alpha = 0.0
