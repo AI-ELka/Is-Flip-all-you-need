@@ -27,7 +27,6 @@ def update_output_dir():
 
     run_ids = {}
 
-    # --- détection du run courant
     for cfg in configs:
         text = cfg.read_text()
         run = extract_run_id(text)
