@@ -1,15 +1,15 @@
 [federated_train_user]
-input_labels = "out/1vs2/cifar/backdoor/mean/"
-budget = 5000
+input_labels = "out/4vs6/cifar/backdoor/mean/"
+budget = 1000
 user_model = "r32p"
 trainer = "sgd"
 dataset = "cifar"
 source_label = 9
 target_label = 4
 poisoner = "1xs"
-output_dir = "out/1vs2/cifar/backdoor/mean/1/5000"
+output_dir = "out/4vs6/cifar/backdoor/mean/1/1000"
 soft = false
 alpha = 0.0
-num_honests = 2
-num_poisoned = 1
+num_honests = 6
+num_poisoned = 4
 agg_method = "mean"
