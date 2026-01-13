@@ -28,6 +28,9 @@ def compute_cta_pta_mean_var(
     base_path=".",
     cta_file="caccs.npy",
     pta_file="paccs.npy",
+    num_poisoned=1,
+    num_clean=2,
+    attack="backdoor",
 ):
     records = []
 
@@ -37,7 +40,7 @@ def compute_cta_pta_mean_var(
         for run in runs:
             run_dir = os.path.join(
                 base_path,
-                f"experiments/federated_experiments/{dataset}_1vs2_backdoor_{aggregator}",
+                f"out/{num_poisoned}vs{num_clean}/{dataset}/{attack}/{aggregator}",
                 str(run),
                 str(budget),
             )
@@ -116,13 +119,16 @@ def collect_cta_pta_per_run(
     base_path=".",
     cta_file="caccs.npy",
     pta_file="paccs.npy",
+    num_poisoned=1,
+    num_clean=2,
+    attack="backdoor",
 ):
     records = []
 
     for budget in budgets:
         run_dir = os.path.join(
             base_path,
-            f"experiments/federated_experiments/{dataset}_1vs2_backdoor_{aggregator}",
+            f"out/{num_poisoned}vs{num_clean}/{dataset}/{attack}/{aggregator}",
             str(run),
             str(budget),
         )
@@ -142,7 +148,7 @@ def collect_cta_pta_per_run(
 
     return pd.DataFrame.from_records(records)
 
-def plot_cta_vs_pta_single_run(df, dataset, aggregator, run, save_dir=None):
+def plot_cta_vs_pta_single_run(df, dataset, aggregator, run, save_dir=None, num_poisoned=1, num_clean=2, attack="backdoor"):
     plt.figure(figsize=(7, 6))
 
     plt.plot(df["pta"], df["cta"], "o-", linewidth=2)
@@ -306,6 +312,9 @@ if __name__ == "__main__":
     OUTPUT_DIR = "./plots"
     CSV_DIR = "./results_csv"
     RUN_PLOTS_DIR = "./plots_per_run"
+    NUM_POISONED = 1
+    NUM_CLEAN = 2
+    ATTACK = "backdoor"
 
     os.makedirs(CSV_DIR, exist_ok=True)
 
@@ -323,6 +332,9 @@ if __name__ == "__main__":
             budgets=BUDGETS,
             runs=RUNS,
             base_path=BASE_PATH,
+            num_poisoned=NUM_POISONED,
+            num_clean=NUM_CLEAN,
+            attack=ATTACK,
         )
 
         dfs_by_agg[aggregator] = df_mean
@@ -344,6 +356,9 @@ if __name__ == "__main__":
                     budgets=BUDGETS,
                     run=run,
                     base_path=BASE_PATH,
+                    num_poisoned=NUM_POISONED,
+                    num_clean=NUM_CLEAN,
+                    attack=ATTACK,
                 )
 
                 if not df_run.empty:

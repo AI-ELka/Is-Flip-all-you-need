@@ -135,8 +135,8 @@ def run(experiment_name, module_name, **kwargs):
 
         # === Save per-worker datasets ===
         for w in range(num_workers):
-            np.save(output_dir / f"{n}_worker{w}_labels.npy", worker_labels[w])
-            np.save(output_dir / f"{n}_worker{w}_indices.npy", worker_indices[w])
+            np.save(output_dir / f"worker{w}/{n}_labels.npy", worker_labels[w])
+            np.save(output_dir / f"worker{w}/{n}_indices.npy", worker_indices[w])
 
 
 if __name__ == "__main__":

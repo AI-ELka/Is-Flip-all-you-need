@@ -11,6 +11,9 @@ DATASET="cifar"
 AGGREGATOR=("mean" "median")
 BUDGETS=(150 300 500 1000 2000 2500 5000 10000)
 N_CYCLES=10
+NUM_CLEAN=2
+NUM_POISONED=1
+ATTACK="backdoor"
 
 BASE_DIR="$HOME/FLIP"
 LOG_DIR="$BASE_DIR/logs"
@@ -83,7 +86,7 @@ for cycle in $(seq 1 $N_CYCLES); do
 
     # Préparer tous les jobs
     for aggregator in "${AGGREGATOR[@]}"; do
-        JOB_CMDS+=("python run_experiment.py federated_experiments/${DATASET}_1vs2_backdoor_${aggregator}")
+        JOB_CMDS+=("python run_experiment.py federated_experiments/${NUM_POISONED}vs${NUM_CLEAN}/${DATASET}/${ATTACK}/${aggregator}/gen_labels")
     done
 
     JOB_ID=0
@@ -113,7 +116,7 @@ for cycle in $(seq 1 $N_CYCLES); do
 
     for aggregator in "${AGGREGATOR[@]}"; do
         for budget in "${BUDGETS[@]}"; do
-            JOB_CMDS+=("python run_experiment.py federated_experiments/train_${DATASET}_backdoor_${aggregator}_${budget}")
+            JOB_CMDS+=("python run_experiment.py federated_experiments/${NUM_POISONED}vs${NUM_CLEAN}/${DATASET}/${ATTACK}/${aggregator}/train_user_${budget}")
         done
     done
 

@@ -73,9 +73,9 @@ def run(experiment_name, module_name, **kwargs):
     user_datasets = []
 
     for w in range(num_workers):
-        idx = np.load(input_dir / f"{budget}_worker{w}_indices.npy")
+        idx = np.load(input_dir / f"worker{w}/{budget}_indices.npy")
         labels_syn = torch.tensor(
-            np.load(input_dir / f"{budget}_worker{w}_labels.npy"),
+            np.load(input_dir / f"worker{w}/{budget}_labels.npy"),
             dtype=torch.float,
         )
 

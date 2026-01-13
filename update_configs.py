@@ -1,8 +1,12 @@
 from pathlib import Path
 import re
 
+NUM_POISONED = 1
+NUM_CLEAN = 2
+ATTACK = "backdoor"
+DATASET = "cifar"
 
-BASE_DIR = Path("experiments/federated_experiments")
+BASE_DIR = Path(f"experiments/federated_experiments/{NUM_POISONED}_vs_{NUM_CLEAN}/{ATTACK}/{DATASET}").resolve()
 
 
 def extract_run_id(text: str):
@@ -16,10 +20,10 @@ def extract_run_id(text: str):
 
 
 def update_output_dir():
-    configs = list(BASE_DIR.glob("train_cifar_backdoor_*/config.toml"))
+    configs = list(BASE_DIR.glob("train_user_*/config.toml"))
 
     if not configs:
-        raise RuntimeError("Aucun config.toml trouvé")
+        raise RuntimeError("None config.toml found")
 
     run_ids = {}
 
@@ -29,23 +33,23 @@ def update_output_dir():
         run = extract_run_id(text)
 
         if run is None:
-            raise RuntimeError(f"Impossible de détecter output_dir dans {cfg}")
+            raise RuntimeError(f"Impossible to detect output_dir in {cfg}")
 
         run_ids[cfg] = run
 
     unique_runs = set(run_ids.values())
     if len(unique_runs) != 1:
         raise RuntimeError(
-            "Incohérence des runs détectés:\n"
+            "Inconsistency detected in runs:\n"
             + "\n".join(f"{c.parent.name}: run {r}" for c, r in run_ids.items())
         )
 
     current_run = unique_runs.pop()
     next_run = current_run + 1
 
-    print(f"[INFO] Run détecté : {current_run} → {next_run}")
+    print(f"[INFO] Detected run: {current_run} → {next_run}")
 
-    # --- mise à jour
+    # --- update
     for cfg in configs:
         text = cfg.read_text()
 
@@ -56,12 +60,12 @@ def update_output_dir():
         )
 
         if n != 1:
-            raise RuntimeError(f"Remplacement inattendu dans {cfg}")
+            raise RuntimeError(f"Unexpected replacement in {cfg}")
 
         cfg.write_text(new_text)
         print(f"[OK] {cfg.parent.name}")
 
-    print("✅ Tous les configs mis à jour")
+    print("✅ All configs updated")
 
 
 if __name__ == "__main__":
