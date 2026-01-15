@@ -76,7 +76,7 @@ def aggr_trmean(gradients, f, **kwargs):
     Aggregated gradient
   """
   # Compute trimmed mean
-  return trmean(torch.stack(gradients), f)
+  return trmean(gradients, f) #trmean(torch.stack(gradients), f)
 
 def aggr_phocas(gradients, f, **kwargs):
   """ Phocas rule.

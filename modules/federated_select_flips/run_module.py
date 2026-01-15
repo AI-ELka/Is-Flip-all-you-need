@@ -6,6 +6,7 @@ and saves both labels and indices for dataset reconstruction.
 from pathlib import Path
 import sys, glob
 import numpy as np
+import os
 
 from modules.base_utils.util import extract_toml, slurmify_path
 
@@ -135,6 +136,7 @@ def run(experiment_name, module_name, **kwargs):
 
         # === Save per-worker datasets ===
         for w in range(num_workers):
+            os.makedirs(output_dir / f"worker{w}", exist_ok=True)
             np.save(output_dir / f"worker{w}/{n}_labels.npy", worker_labels[w])
             np.save(output_dir / f"worker{w}/{n}_indices.npy", worker_indices[w])
 

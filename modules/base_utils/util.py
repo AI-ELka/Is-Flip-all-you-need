@@ -11,8 +11,8 @@ from modules.base_utils.model.model import SequentialImageNetwork,\
 import torch.backends.cudnn as cudnn
 import toml
 from collections import OrderedDict
-from aggregator.trmean import aggr_trmean
-from aggregator.krum import aggregate as aggr_krum
+from modules.base_utils.aggregator.trmean import aggr_trmean
+from modules.base_utils.aggregator.krum import aggregate as aggr_krum
 
 from modules.base_utils.datasets import make_dataloader
 
