@@ -7,11 +7,12 @@ from pathlib import Path
 # ==========================
 NUM_POISONED = 4
 NUM_CLEAN = 6
-ATTACK = "backdoor"
-DATASET = "svhn"
+ATTACK = "stealthy_backdoor"
+DATASET = "cifar"
 AGGREGATORS = ["mean", "median", "krum", "trmean"]
 BUDGETS = [150, 300, 500, 1000, 1500, 2000, 2500, 5000]
-N_CYCLES = 10  
+N_CYCLES = 10
+GAMMA = 0.5  
 
 BASE_DIR = Path("experiments/federated_experiments").resolve()
 
@@ -47,6 +48,7 @@ num_honests = {num_clean}
 num_poisoned = {num_poisoned}
 agg_method = "{aggregator}"
 attack = "{attack}"
+gamma = {gamma}
 
 [federated_generate_labels.expert_config]
 experts = 1
@@ -106,6 +108,7 @@ def generate_all_configs():
                 num_poisoned=NUM_POISONED,
                 num_clean=NUM_CLEAN,
                 attack=ATTACK,
+                gamma=GAMMA,
                 aggregator=aggregator,
                 run_id=run_id,
                 budgets=BUDGETS

@@ -4,9 +4,11 @@ Optimizes logit labels given expert trajectories using trajectory matching.
 
 from pathlib import Path
 import sys
-
+import math
 import torch
 import numpy as np
+from scipy.stats import norm 
+from damed_pytorch import DAMEDMedian
 
 from modules.base_utils.datasets import get_matching_datasets, pick_poisoner, get_n_classes
 from modules.base_utils.util import extract_toml, get_module_device, get_mtt_attack_info, \
@@ -16,6 +18,8 @@ from modules.federated_generate_labels.utils import coalesce_attack_config, extr
                                                     extract_labels, sgd_step
 from modules.base_utils.aggregator.trmean import aggr_trmean
 from modules.base_utils.aggregator.krum import aggregate as aggr_krum
+
+#damed = DAMEDMedian(tau=0.1)
 
 
 def cosine_similarity_list(grads_a, grads_b, eps=1e-8):
@@ -35,6 +39,13 @@ def agg(params, grad_buf, method, f=1):
             g = grads.mean(dim=0)
         elif method == "median":
             g = grads.median(dim=0).values
+            # orig_shape = grads.shape[1:]
+            # grads_flat = grads.view(grads.shape[0], -1)
+
+            # g_flat = damed(grads_flat)
+
+            # g = g_flat.view(orig_shape)
+
         elif method == "trmean":
             g = aggr_trmean(grads, f=f)
         elif method == "krum":
@@ -44,6 +55,46 @@ def agg(params, grad_buf, method, f=1):
         p.grad = g
         agg_grads.append(g)
     return agg_grads
+
+def get_s(num_clients, num_poisoned):
+    s = num_clients / 2 + 1
+    return max(1, math.floor(s) - num_poisoned)
+
+def get_z_max(s, num_clients, device=None, dtype=None, eps=1e-6):
+    q = (num_clients - s) / num_clients
+    q = min(max(q, eps), 1 - eps)
+    z = norm.ppf(q)
+    return torch.tensor(z, device=device, dtype=dtype)
+
+def get_stealthy_loss_vectorized(
+    grads_buf,
+    num_honests,
+    num_poisoned,
+    z_max,
+    eps=1e-5
+):
+    device = grads_buf[0][0].device
+    n_params = sum(g_list[0].numel() for g_list in grads_buf)
+
+    flat_grads = torch.cat(
+        [torch.stack(g_list, dim=0).view(len(g_list), -1) for g_list in grads_buf],
+        dim=1
+    )
+
+    honest_grads = flat_grads[:num_honests, :]
+    poisoned_grads = flat_grads[-num_poisoned:, :]
+
+    mu = honest_grads.mean(dim=0)
+    sigma = honest_grads.std(dim=0, unbiased=True)
+    sigma = torch.clamp(sigma, min=eps)
+
+    denom = torch.maximum(z_max * sigma, torch.tensor(eps, device=device))
+
+    diff = (poisoned_grads - mu) / denom
+
+    stealthy_loss = (diff.pow(2).sum() / n_params) / num_poisoned
+
+    return stealthy_loss
 
 
 def run(experiment_name, module_name, **kwargs):
@@ -77,6 +128,8 @@ def run(experiment_name, module_name, **kwargs):
     output_dir = slurmify_path(args["output_dir"], slurm_id)
     attack = args.get("attack", "backdoor")
     clean_trajectory = args.get("clean_trajectory", False)
+    gamma = args.get("gamma", 1.0)
+    
     Path(output_dir).mkdir(parents=True, exist_ok=True)
 
     # Build datasets and initialize labels
@@ -95,6 +148,8 @@ def run(experiment_name, module_name, **kwargs):
     labels_syn = torch.stack(labels).requires_grad_(True)
     agg_method = args.get("agg_method", "mean")
 
+    s = get_s(num_honests + num_poisoned, num_poisoned)
+    z_max = get_z_max(s, num_honests + num_poisoned)
 
     # Load expert trajectories
     print("Loading expert trajectories...")
@@ -160,23 +215,14 @@ def run(experiment_name, module_name, **kwargs):
                     if cid < num_honests:
                         x, y = batch[0].to(device), batch[1].to(device)
 
-                        # Expert
                         expert_model.zero_grad()
-                        loss_e = clf_loss(expert_model(x), y)
-                        loss_e.backward()
+                        loss = clf_loss(expert_model(x), y)
+                        loss.backward()
 
                         for i, p in enumerate(expert_params):
                             if p.grad is not None:
                                 expert_grad_buf[i].append(p.grad.detach().clone())
-
-                        # Student
-                        loss_s = clf_loss(student_model(x), y)
-                        grads_s = torch.autograd.grad(
-                            loss_s, student_params, create_graph=True
-                        )
-
-                        for i, g in enumerate(grads_s):
-                            student_grad_buf[i].append(g)
+                                student_grad_buf[i].append(p.grad.detach().clone())
 
                     # ---------- POISONED CLIENTS ----------
                     else:
@@ -232,7 +278,7 @@ def run(experiment_name, module_name, **kwargs):
                     dim=1
                 ).mean()
 
-                if attack in ["backdoor", "untargeted"]:
+                if attack in ["backdoor", "untargeted", "stealthy_backdoor"]:
                     for init, student, expert, grad, state in zip(
                         expert_start,
                         student_params,
@@ -248,6 +294,7 @@ def run(experiment_name, module_name, **kwargs):
                         param_dist += total_mse_distance(init, expert)
 
                     grand_loss = (param_loss / param_dist) + reg_term
+                    grand_loss = gamma * grand_loss
                     if attack == "untargeted":
                         grand_loss = -grand_loss
                 
@@ -265,6 +312,15 @@ def run(experiment_name, module_name, **kwargs):
                     )
                     grand_loss = cos ** 2 + reg_term
 
+                if attack == "stealthy_backdoor":
+                    stealthy_loss = get_stealthy_loss_vectorized(
+                        student_grad_buf,
+                        num_honests,
+                        num_poisoned,
+                        z_max
+                    )
+                    grand_loss += (1-gamma)*stealthy_loss
+                
                 # Optimize labels
                 optimizer_labels.zero_grad()
                 grand_loss.backward()
@@ -274,6 +330,8 @@ def run(experiment_name, module_name, **kwargs):
                 pbar.update(batch_size)
                 pbar.set_postfix(
                     g_loss=f"{np.mean(losses[-20:]):.4g}",
+                    backdoor_loss=f"{(param_loss/param_dist).item():.4g}" if attack in ["backdoor", "untargeted", "stealthy_backdoor"] else "N/A",
+                    stealthy_loss=f"{stealthy_loss.item():.4g}" if attack == "stealthy_backdoor" else "N/A",
                     reg=f"{reg_term.item():.4g}"
                 )
 

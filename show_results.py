@@ -304,16 +304,16 @@ def plot_cta_vs_pta_single_run_multi_aggregators(
 if __name__ == "__main__":
 
     DATASET = "cifar"  # or "svhn"
-    AGGREGATORS = ["mean", "median"]
-    BUDGETS = [150, 300, 500, 1000, 2000, 2500, 5000, 10000]
-    RUNS = range(5, 15)
+    AGGREGATORS = ["mean", "median", "krum"]
+    BUDGETS = [150, 300, 500, 1000, 2000, 2500, 5000]
+    RUNS = range(1, 11)
 
     BASE_PATH = "."
     OUTPUT_DIR = "./plots"
     CSV_DIR = "./results_csv"
     RUN_PLOTS_DIR = "./plots_per_run"
-    NUM_POISONED = 1
-    NUM_CLEAN = 2
+    NUM_POISONED = 4
+    NUM_CLEAN = 6
     ATTACK = "backdoor"
 
     os.makedirs(CSV_DIR, exist_ok=True)
