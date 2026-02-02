@@ -129,6 +129,7 @@ def run(experiment_name, module_name, **kwargs):
     attack = args.get("attack", "backdoor")
     clean_trajectory = args.get("clean_trajectory", False)
     gamma = args.get("gamma", 1.0)
+    agg_method = args.get("agg_method", "mean")
     
     Path(output_dir).mkdir(parents=True, exist_ok=True)
 
@@ -139,14 +140,13 @@ def run(experiment_name, module_name, **kwargs):
                              target_label)
 
     big_ims = needs_big_ims(expert_model_flag)
-    train_dataset, distill_dataset, test_dataset, poison_test_dataset, mtt_dataset =\
+    *_, mtt_dataset =\
         get_matching_datasets(dataset_flag, poisoner, clean_label, train_pct=train_pct, big=big_ims, clean=clean_trajectory)
     
     n_classes = get_n_classes(dataset_flag)
     labels = extract_labels(mtt_dataset.distill, config['one_hot_temp'], n_classes)
     labels_init = torch.stack(extract_labels(mtt_dataset.distill, 1, n_classes))
     labels_syn = torch.stack(labels).requires_grad_(True)
-    agg_method = args.get("agg_method", "mean")
 
     s = get_s(num_honests + num_poisoned, num_poisoned)
     z_max = get_z_max(s, num_honests + num_poisoned)

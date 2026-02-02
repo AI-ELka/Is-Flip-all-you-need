@@ -1,6 +1,5 @@
 #!/bin/bash
 set -e
-set -x
 
 ############################################
 # CONFIGURATION
@@ -120,31 +119,51 @@ for aggregator in "${AGGREGATORS[@]}"; do
     TOTAL_JOBS=${#JOBS[@]}
     INDEX=0
 
-    # 2) Lancer par batchs de N_MACHINES
-    while [ $INDEX -lt $TOTAL_JOBS ]; do
-        DONE_FILES=()
+    echo "Total jobs: $TOTAL_JOBS"
+    # 2) Worker pool: assign next job to any machine as soon as it frees up
+    declare -a running
+    for ((i=0; i<N_MACHINES; i++)); do running[i]=""; done
 
-        echo "[BATCH] Launching jobs $INDEX → $((INDEX + N_MACHINES - 1))"
+    while true; do
+        # Assign jobs to free machines
+        for ((i=0; i<N_MACHINES; i++)); do
+            if [ -z "${running[i]:-}" ] && [ $INDEX -lt $TOTAL_JOBS ]; then
+                IFS='|' read -r run_id budget <<< "${JOBS[$INDEX]}"
+                machine=${MACHINES[$i]}
 
-        for ((i=0; i<N_MACHINES && INDEX<TOTAL_JOBS; i++)); do
-            IFS='|' read -r run_id budget <<< "${JOBS[$INDEX]}"
-            machine=${MACHINES[$i]}
+                config="federated_experiments/${NUM_POISONED}vs${NUM_CLEAN}/${DATASET}/${ATTACK}/${aggregator}/train_user_${budget}/${run_id}"
 
-            config="federated_experiments/${NUM_POISONED}vs${NUM_CLEAN}/${DATASET}/${ATTACK}/${aggregator}/train_user_${budget}/${run_id}"
+                safe_name="train_${aggregator}_${run_id}_${budget}_${machine}"
+                done_file="$LOG_DIR/${safe_name}.done"
+                log_file="$LOG_DIR/${safe_name}.log"
+                rm -f "$done_file"
 
-            safe_name="train_${aggregator}_${run_id}_${budget}_${machine}"
-            done_file="$LOG_DIR/${safe_name}.done"
-            log_file="$LOG_DIR/${safe_name}.log"
-            rm -f "$done_file"
-
-            run_remote "$machine" "python run_experiment.py $config" "$done_file" "$log_file" &
-
-            DONE_FILES+=("$done_file")
-            INDEX=$((INDEX + 1))
+                run_remote "$machine" "python run_experiment.py $config" "$done_file" "$log_file" &
+                running[i]=$done_file
+                INDEX=$((INDEX + 1))
+                echo "[POOL] $machine ← job $INDEX/$TOTAL_JOBS"
+            fi
         done
 
-        wait_for_done_files "${DONE_FILES[@]}"
-        echo "✅ Batch completed"
+        # Exit when no jobs left and all machines idle
+        all_idle=true
+        for ((i=0; i<N_MACHINES; i++)); do
+            [ -n "${running[i]:-}" ] && all_idle=false && break
+        done
+        if $all_idle && [ $INDEX -ge $TOTAL_JOBS ]; then
+            break
+        fi
+
+        # Wait for at least one machine to finish (then loop to assign next job)
+        while true; do
+            for ((i=0; i<N_MACHINES; i++)); do
+                if [ -n "${running[i]:-}" ] && [ -f "${running[i]}" ]; then
+                    running[i]=""
+                    break 2
+                fi
+            done
+            sleep 5
+        done
     done
 
     echo "✅ train_user all runs done"
