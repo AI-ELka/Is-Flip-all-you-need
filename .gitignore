@@ -158,3 +158,6 @@ results*/
 examples/
 logs/
 locks/
+
+experiments/*
+lightning_logs

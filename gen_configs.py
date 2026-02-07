@@ -5,13 +5,13 @@ from pathlib import Path
 # ==========================
 # Paramètres à configurer
 # ==========================
-NUM_POISONED = 4
-NUM_CLEAN = 6
+NUM_POISONED = 3
+NUM_CLEAN = 7
 ATTACK = "stealthy_backdoor"
 DATASET = "cifar"
 AGGREGATORS = ["mean", "median", "krum", "trmean"]
 BUDGETS = [150, 300, 500, 1000, 1500, 2000, 2500, 5000]
-N_CYCLES = 10
+N_CYCLES = 5
 GAMMA = 0.5  
 
 BASE_DIR = Path("experiments/federated_experiments").resolve()

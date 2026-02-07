@@ -15,14 +15,29 @@ DATASET="cifar"
 ATTACK="stealthy_backdoor"
 AGGREGATORS=("median") # "mean" "krum" "trmean"
 BUDGETS=(150 300 500 1000 1500 2000 2500 5000)
-N_CYCLES=10
-NUM_CLEAN=6
-NUM_POISONED=4
+N_CYCLES=5
+NUM_CLEAN=7
+NUM_POISONED=3
 
+# MACHINES=(
+# bentley bugatti cadillac chrysler corvette ferrari fiat ford jaguar lada
+# maserati nissan niva peugeot pontiac rolls rover
+# royce simca skoda venturi volvo renault porsche
+# )
 MACHINES=(
-bentley bugatti cadillac chrysler corvette ferrari fiat ford jaguar lada
-maserati nissan niva peugeot pontiac rolls rover
-royce simca skoda venturi volvo renault porsche
+    "poly-acromion"
+    "poly-apophyse"
+    "poly-astragale"
+    "poly-atlas"
+    "poly-axis"
+    "poly-coccyx"
+    "poly-cote"
+    "poly-cubitus"
+    "poly-cuboide"
+    "poly-femur"
+    "poly-frontal"
+    "poly-humerus"
+    "poly-malleole"
 )
 
 N_MACHINES=${#MACHINES[@]}
@@ -41,6 +56,7 @@ run_remote() {
 
     ssh "$machine" "
         cd $BASE_DIR &&
+            source .venv/bin/activate &&
         nohup bash -c '$cmd; touch $done_file' > $log_file 2>&1 &
     "
 }

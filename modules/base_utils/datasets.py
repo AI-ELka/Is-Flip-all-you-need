@@ -112,11 +112,18 @@ TINY_IMAGENET_TRANSFORM_TEST = transforms.Compose(
     ]
 )
 
+# PATH = {
+#     'cifar': Path("./data/data_cifar10"),
+#     'cifar_100': Path("./data/data_cifar100"),
+#     'tiny_imagenet': "/scr/tiny-imagenet-200",
+#     'svhn': Path("./data/data_svhn"),
+# }
+
 PATH = {
-    'cifar': Path("./data/data_cifar10"),
-    'cifar_100': Path("./data/data_cifar100"),
-    'tiny_imagenet': "/scr/tiny-imagenet-200",
-    'svhn': Path("./data/data_svhn"),
+    'cifar': Path("/Data/ab/LFGD/data/data_cifar10"),
+    'cifar_100': Path("/Data/ab/LFGD/data/data_cifar100"),
+    'tiny_imagenet': "/Data/ab/LFGD/data/tiny-imagenet-200",
+    'svhn': Path("/Data/ab/LFGD/data/data_svhn"),
 }
 
 TRANSFORM_TRAIN_XY = {
