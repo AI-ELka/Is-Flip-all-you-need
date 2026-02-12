@@ -69,6 +69,8 @@ def optimize_trigger_step_federated(
     epsilon,
     device="cuda",
     dataset_flag="cifar",
+    init="stripe",
+    model_flag="r32p",
 ):
     sampled_k = sample_checkpoints(
         len(expert_models),
@@ -216,16 +218,28 @@ def optimize_trigger_step_federated(
             "||delta||": f"{delta.norm().item():.4f}",
         })
 
-    delta_img = delta.detach().cpu().numpy().transpose(1, 2, 0)
+    # delta_img = delta.detach().cpu().numpy().transpose(1, 2, 0)
+    # delta_img = (delta_img - delta_img.min()) / (delta_img.max() - delta_img.min() + 1e-8)
+    # plt.imshow(delta_img)
+    # plt.title("Optimized Trigger (Delta)")
+    # plt.axis("off")
+    # plt.savefig(f"out/optimizing_trigger_stripe/fed_opt_trig_{dataset_flag}_{agg_method}_{num_poisoned}_{num_honests}.png")
+
+    # torch.save(
+    # delta.cpu(),
+    # f"out/optimizing_trigger/fed_opt_trig_{dataset_flag}_{agg_method}_{num_poisoned}_{num_honests}.pt",
+    # )
+    
+    delta_img = delta.cpu().numpy().transpose(1, 2, 0)
     delta_img = (delta_img - delta_img.min()) / (delta_img.max() - delta_img.min() + 1e-8)
     plt.imshow(delta_img)
     plt.title("Optimized Trigger (Delta)")
     plt.axis("off")
-    plt.savefig(f"out/optimizing_trigger_stripe/fed_opt_trig_{dataset_flag}_{agg_method}_{num_poisoned}_{num_honests}.png")
+    plt.savefig(f"out/optimizing_trigger/fed_opt_trig_{init}_{model_flag}_{dataset_flag}_{agg_method}_{num_poisoned}vs{num_honests}.png")
 
     torch.save(
-    delta.cpu(),
-    f"out/optimizing_trigger/fed_opt_trig_{dataset_flag}_{agg_method}_{num_poisoned}_{num_honests}.pt",
+        delta.cpu(),
+        f"optimized_trigger/fed_opt_trig_{init}_{model_flag}_{dataset_flag}_{agg_method}_{num_poisoned}vs{num_honests}.pt",
     )
 
     return delta
@@ -468,11 +482,11 @@ def run(experiment_name, module_name, **kwargs):
     plt.imshow(delta_img)
     plt.title("Optimized Trigger (Delta)")
     plt.axis("off")
-    plt.savefig(f"out/optimizing_trigger_stripe/opt_trig_{agg_method}_({num_poisoned}_{num_honests}).png")
+    plt.savefig(f"out/optimizing_trigger/fed_opt_trig_{init}_{model_flag}_{dataset_flag}_{agg_method}_{num_poisoned}vs{num_honests}.png")
 
     torch.save(
         optimized_delta.cpu(),
-        f"out/optimizing_trigger/fed_opt_trig_{dataset_flag}_{agg_method}_{num_poisoned}_{num_honests}.pt",
+        f"optimized_trigger/fed_opt_trig_{init}_{model_flag}_{dataset_flag}_{agg_method}_{num_poisoned}vs{num_honests}.pt",
     )
 
 if __name__ == "__main__":
