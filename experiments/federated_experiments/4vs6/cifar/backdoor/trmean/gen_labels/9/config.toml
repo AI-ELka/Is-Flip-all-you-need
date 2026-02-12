@@ -26,6 +26,7 @@ num_honests = 6
 num_poisoned = 4
 agg_method = "trmean"
 attack = "backdoor"
+gamma = 1.0
 
 [federated_generate_labels.expert_config]
 experts = 1

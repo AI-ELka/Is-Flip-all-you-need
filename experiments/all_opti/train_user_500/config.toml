@@ -1,0 +1,12 @@
+[train_user]
+input_labels = "out/all_opti/500.npy"
+user_model = "r32p"
+trainer = "sgd"
+dataset = "cifar"
+source_label = 9
+target_label = 4
+poisoner = "optimized"
+delta = "optimized_trigger/optimized_trigger_final.pt"
+output_dir = "out/all_opti/500/"
+soft = false
+alpha = 0.0

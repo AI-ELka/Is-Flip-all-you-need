@@ -12,17 +12,17 @@ LOG_DIR="$BASE_DIR/logs"
 mkdir -p "$LOG_DIR"
 
 DATASET="cifar"
-ATTACK="stealthy_backdoor"
-AGGREGATORS=("median") # "mean" "krum" "trmean"
+ATTACK="backdoor"
+AGGREGATORS=("mean" "median" "krum" "trmean") #  "krum" "trmean"
 BUDGETS=(150 300 500 1000 1500 2000 2500 5000)
-N_CYCLES=10
+N_CYCLES=5
 NUM_CLEAN=6
 NUM_POISONED=4
 
 MACHINES=(
-bentley bugatti cadillac chrysler corvette ferrari fiat ford jaguar lada
+bentley bugatti cadillac chrysler corvette ferrari ford jaguar lada
 maserati nissan niva peugeot pontiac rolls rover
-royce simca skoda venturi volvo renault porsche
+royce simca skoda venturi volvo renault porsche fiat
 )
 
 N_MACHINES=${#MACHINES[@]}

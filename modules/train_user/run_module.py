@@ -29,6 +29,7 @@ def run(experiment_name, module_name, **kwargs):
     user_model_flag = args["user_model"]
     trainer_flag = args["trainer"]
     dataset_flag = args["dataset"]
+    delta = args.get("delta", None)
     poisoner_flag = args["poisoner"]
     clean_label = args["source_label"]
     target_label = args["target_label"]
@@ -47,7 +48,7 @@ def run(experiment_name, module_name, **kwargs):
 
     # Build datasets
     print("Building datasets...")
-    poisoner = pick_poisoner(poisoner_flag, dataset_flag, target_label)
+    poisoner = pick_poisoner(poisoner_flag, dataset_flag, target_label, delta=delta)
 
     big_ims = needs_big_ims(user_model_flag)
     _, distillation, test, poison_test, _ =\

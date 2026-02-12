@@ -33,6 +33,7 @@ def run(experiment_name, module_name, **kwargs):
     trainer_flag = args["trainer"]
     dataset_flag = args["dataset"]
     poisoner_flag = args["poisoner"]
+    delta = args.get("delta", None)
     clean_label = args["source_label"]
     target_label = args["target_label"]
 
@@ -55,7 +56,7 @@ def run(experiment_name, module_name, **kwargs):
     agg_method = args.get("agg_method", "mean")
 
     print("Loading base datasets...")
-    poisoner = pick_poisoner(poisoner_flag, dataset_flag, target_label)
+    poisoner = pick_poisoner(poisoner_flag, dataset_flag, target_label, delta)
     big_ims = needs_big_ims(user_model_flag)
 
     _, distillation, test, poison_test, _ = get_matching_datasets(
@@ -107,7 +108,8 @@ def run(experiment_name, module_name, **kwargs):
         scheduler_kwargs,
     )
 
-    batch_size = batch_size // num_workers
+    # if agg_method == "median":
+    #     batch_size = batch_size // 3
 
     model_retrain, clean_metrics, poison_metrics = mini_train_multi(
         model=model_retrain,

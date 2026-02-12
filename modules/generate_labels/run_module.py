@@ -35,6 +35,7 @@ def run(experiment_name, module_name, **kwargs):
     expert_model_flag = args["expert_model"]
     dataset_flag = args["dataset"]
     poisoner_flag = args["poisoner"]
+    delta = args.get("delta", None)
     clean_label = args["source_label"]
     target_label = args["target_label"]
     lam = args.get("lambda", 0.0)
@@ -52,7 +53,8 @@ def run(experiment_name, module_name, **kwargs):
     n_classes = get_n_classes(dataset_flag)
     poisoner = pick_poisoner(poisoner_flag,
                              dataset_flag,
-                             target_label)
+                             target_label,
+                             delta=delta)
 
     big_ims = needs_big_ims(expert_model_flag)
     _, _, _, _, mtt_dataset =\

@@ -304,9 +304,9 @@ def plot_cta_vs_pta_single_run_multi_aggregators(
 if __name__ == "__main__":
 
     DATASET = "cifar"  # or "svhn"
-    AGGREGATORS = ["mean", "median", "krum"]
+    AGGREGATORS = ["mean", "median", "trmean", "krum"]#, "krum"
     BUDGETS = [150, 300, 500, 1000, 2000, 2500, 5000]
-    RUNS = range(1, 11)
+    RUNS = range(1, 6)
 
     BASE_PATH = "."
     OUTPUT_DIR = "./plots"

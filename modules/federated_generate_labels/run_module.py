@@ -66,6 +66,35 @@ def get_z_max(s, num_clients, device=None, dtype=None, eps=1e-6):
     z = norm.ppf(q)
     return torch.tensor(z, device=device, dtype=dtype)
 
+def get_median_hinge_loss(
+    grads_buf,
+    num_honests,
+    num_poisoned,
+    eps=1e-8
+):
+    device = grads_buf[0][0].device
+
+    flat_grads = torch.cat(
+        [torch.stack(g_list, dim=0).view(len(g_list), -1)
+         for g_list in grads_buf],
+        dim=1
+    )
+
+    honest = flat_grads[:num_honests]          # [H, D]
+    poisoned = flat_grads[-num_poisoned:]      # [P, D]
+
+    lower = honest.min(dim=0).values
+    upper = honest.max(dim=0).values
+
+    # hinge coordinate
+    loss = (
+        torch.relu(poisoned - upper) +
+        torch.relu(lower - poisoned)
+    )
+
+    return loss.mean()
+
+
 def get_stealthy_loss_vectorized(
     grads_buf,
     num_honests,
@@ -114,6 +143,7 @@ def run(experiment_name, module_name, **kwargs):
     opt_pths = args["opt_pths"]
     expert_model_flag = args["expert_model"]
     dataset_flag = args["dataset"]
+    delta = args.get("delta", None)
     poisoner_flag = args["poisoner"]
     clean_label = args["source_label"]
     target_label = args["target_label"]
@@ -136,7 +166,8 @@ def run(experiment_name, module_name, **kwargs):
     print("Building datasets...")
     poisoner = pick_poisoner(poisoner_flag,
                              dataset_flag,
-                             target_label)
+                             target_label,
+                             delta=delta)
 
     big_ims = needs_big_ims(expert_model_flag)
     train_dataset, distill_dataset, test_dataset, poison_test_dataset, mtt_dataset =\
@@ -313,11 +344,10 @@ def run(experiment_name, module_name, **kwargs):
                     grand_loss = cos ** 2 + reg_term
 
                 if attack == "stealthy_backdoor":
-                    stealthy_loss = get_stealthy_loss_vectorized(
+                    stealthy_loss = get_median_hinge_loss(
                         student_grad_buf,
                         num_honests,
-                        num_poisoned,
-                        z_max
+                        num_poisoned
                     )
                     grand_loss += (1-gamma)*stealthy_loss
                 
