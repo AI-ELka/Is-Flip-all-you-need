@@ -12,6 +12,7 @@ results/
 viz/
 utils/
 precomputed_labels/
+experiments/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

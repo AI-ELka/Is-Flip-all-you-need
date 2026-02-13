@@ -27,6 +27,7 @@ def run(experiment_name, module_name, **kwargs):
     dataset_flag = args["dataset"]
     train_flag = args["trainer"]
     poisoner_flag = args["poisoner"]
+    delta = args.get("delta", None)
     clean_label = args["source_label"]
     target_label = args["target_label"]
     ckpt_iters = args.get("checkpoint_iters")
@@ -47,7 +48,8 @@ def run(experiment_name, module_name, **kwargs):
     big_ims = needs_big_ims(model_flag)
     poisoner = pick_poisoner(poisoner_flag,
                              dataset_flag,
-                             target_label)
+                             target_label,
+                             delta=delta)
     poison_train, _, test, poison_test, _ =\
         get_matching_datasets(dataset_flag, poisoner, clean_label, train_pct=train_pct, big=big_ims)
 

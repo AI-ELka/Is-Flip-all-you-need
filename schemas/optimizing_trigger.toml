@@ -1,0 +1,48 @@
+###
+# optimizing_trigger schema
+# Optimizes a backdoor trigger (delta, rho) by matching gradients along
+# expert training trajectories and enforcing adversarial objectives.
+# Outputs optimized trigger tensors as .pt files.
+###
+
+[optimizing_trigger]
+dataset = "string: {cifar, cifar_100, tiny_imagenet}. Dataset used for training."
+model = "string: {r32p, r18, r18_tin, vgg, vgg_pretrain, vit_pretrain}. Model architecture."
+
+source_label = "int: {-1,0,...,9}. Source label. -1 means all source labels."
+target_label = "int: {0,1,...,9}. Target label for the backdoor attack."
+
+output_dir = "string. Path to output directory (slurm compatible)."
+
+device = "string: {cpu, cuda}. Device used for optimization. Defaults to cuda if available."
+
+###
+# Loss weights
+###
+lambda_match = "float: [0, +infty). Weight for gradient matching loss."
+lambda_adv = "float: [0, +infty). Weight for adversarial loss on poisoned samples."
+lambda_penalty = "float: [0, +infty). Weight for trigger penalty relative to mu."
+lambda_rho = "float: [0, +infty). Weight for rho regularization."
+lambda_delta = "float: [0, +infty). Weight for L2 norm penalty on delta."
+
+###
+# Trigger optimization hyperparameters
+###
+epsilon = "float: (0, +infty). L_infinity bound on trigger delta."
+lr_delta = "float: (0, +infty). Learning rate for trigger and rho optimization."
+n_steps = "int: {1,...,+infty}. Number of trigger optimization steps."
+
+###
+# Checkpoint sampling (expert trajectory matching)
+###
+alpha_ckpt = "float: (0,1]. Controls bias toward early or late checkpoints."
+num_chckpt = "int: {1,...,+infty}. Number of checkpoints sampled per step."
+
+###
+# Expert trajectory configuration
+###
+expert_path = "string. Format string path to expert checkpoints with '{}' placeholders."
+
+[OPTIONAL]
+expert_config = "dict. Configuration describing expert checkpoints to load."
+init = "str. Trigger initialization"

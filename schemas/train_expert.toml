@@ -15,6 +15,7 @@ poisoner = "string: Form: {{1,2,3,9}xp, {1,2}xs, {1,4}xl}. Integer resembles num
 checkpoint_iters = "int: {0,1,...,infty}. Number of iterations between each checkpoint record."
 
 [OPTIONAL]
+delta = "str. Path for optimized trigger"
 batch_size = "int: {0,1,...,infty}. Specifies batch size. Set to default for trainer if omitted."
 epochs = "int: {0,1,...,infty}. Specifies number of epochs. Set to default for trainer if omitted."
 train_pct = "float: [0, 1]. Specifies percentage of dataset available to attacker. Set to 1 by default."
