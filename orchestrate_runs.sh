@@ -2,10 +2,6 @@
 set -e
 set -x
 
-############################################
-# CONFIGURATION
-############################################
-
 BASE_DIR="$HOME/FLIP"
 LOG_DIR="$BASE_DIR/logs"
 
@@ -13,11 +9,13 @@ mkdir -p "$LOG_DIR"
 
 DATASET="cifar"
 ATTACK="backdoor"
-AGGREGATORS=("mean" "median" "krum" "trmean") #  "krum" "trmean"
+AGGREGATORS=("mean" "median" "krum" "trmean")
 BUDGETS=(150 300 500 1000 1500 2000 2500 5000)
 N_CYCLES=5
 NUM_CLEAN=6
 NUM_POISONED=4
+MODEL_FLAG="r32p"
+POISONER="1xs"
 
 MACHINES=(
 bentley bugatti cadillac chrysler corvette ferrari ford jaguar lada
@@ -26,10 +24,6 @@ royce simca skoda venturi volvo renault porsche fiat
 )
 
 N_MACHINES=${#MACHINES[@]}
-
-############################################
-# FUNCTIONS
-############################################
 
 run_remote() {
     local machine=$1
@@ -59,27 +53,15 @@ wait_for_done_files() {
     echo "[DONE] Phase completed"
 }
 
-############################################
-# CLEANUP
-############################################
-
-echo "🧹 Cleaning previous logs and done files..."
+echo "Cleaning previous logs and done files..."
 rm -f "$LOG_DIR"/*.log "$LOG_DIR"/*.done || true
-
-############################################
-# MAIN LOOP
-############################################
 
 for aggregator in "${AGGREGATORS[@]}"; do
     echo "========================================"
     echo "AGGREGATOR: $aggregator"
     echo "========================================"
 
-    #####################################
-    # PHASE A — gen_labels
-    #####################################
-
-    echo "[PHASE A] gen_labels"
+    echo "1 - gen_labels"
 
     DONE_FILES=()
     JOB_ID=0
@@ -87,9 +69,9 @@ for aggregator in "${AGGREGATORS[@]}"; do
     for ((run_id=1; run_id<=N_CYCLES; run_id++)); do
         machine=${MACHINES[$((JOB_ID % N_MACHINES))]}
 
-        config="federated_experiments/${NUM_POISONED}vs${NUM_CLEAN}/${DATASET}/${ATTACK}/${aggregator}/gen_labels/${run_id}"
+        config="federated_experiments/${MODEL_FLAG}/${NUM_POISONED}vs${NUM_CLEAN}/${DATASET}/${ATTACK}/${aggregator}/${POISONER}/gen_labels/${run_id}"
 
-        safe_name="gen_${aggregator}_${run_id}_${machine}"
+        safe_name="gen_${MODEL_FLAG}_${NUM_POISONED}vs${NUM_CLEAN}_${DATASET}_${ATTACK}_${aggregator}_${POISONER}_${run_id}_${machine}"
         done_file="$LOG_DIR/${safe_name}.done"
         log_file="$LOG_DIR/${safe_name}.log"
         rm -f "$done_file"
@@ -101,15 +83,10 @@ for aggregator in "${AGGREGATORS[@]}"; do
     done
 
     wait_for_done_files "${DONE_FILES[@]}"
-    echo "✅ gen_labels done"
+    echo "gen_labels done"
 
-    #####################################
-    # PHASE B — train_user (BATCHED)
-    #####################################
+    echo "2 - train_user"
 
-    echo "[PHASE B] train_user"
-
-    # 1) Construire la liste complète des jobs
     JOBS=()
     for ((run_id=1; run_id<=N_CYCLES; run_id++)); do
         for budget in "${BUDGETS[@]}"; do
@@ -120,7 +97,6 @@ for aggregator in "${AGGREGATORS[@]}"; do
     TOTAL_JOBS=${#JOBS[@]}
     INDEX=0
 
-    # 2) Lancer par batchs de N_MACHINES
     while [ $INDEX -lt $TOTAL_JOBS ]; do
         DONE_FILES=()
 
@@ -130,9 +106,9 @@ for aggregator in "${AGGREGATORS[@]}"; do
             IFS='|' read -r run_id budget <<< "${JOBS[$INDEX]}"
             machine=${MACHINES[$i]}
 
-            config="federated_experiments/${NUM_POISONED}vs${NUM_CLEAN}/${DATASET}/${ATTACK}/${aggregator}/train_user_${budget}/${run_id}"
+            config="federated_experiments/${MODEL_FLAG}/${NUM_POISONED}vs${NUM_CLEAN}/${DATASET}/${ATTACK}/${aggregator}/${POISONER}/train_user_${budget}/${run_id}"
 
-            safe_name="train_${aggregator}_${run_id}_${budget}_${machine}"
+            safe_name="${MODEL_FLAG}_${NUM_POISONED}vs${NUM_CLEAN}_${DATASET}_${ATTACK}_${aggregator}_${POISONER}_${run_id}_${machine}"
             done_file="$LOG_DIR/${safe_name}.done"
             log_file="$LOG_DIR/${safe_name}.log"
             rm -f "$done_file"
@@ -144,10 +120,14 @@ for aggregator in "${AGGREGATORS[@]}"; do
         done
 
         wait_for_done_files "${DONE_FILES[@]}"
-        echo "✅ Batch completed"
+        echo "Batch completed"
     done
 
-    echo "✅ train_user all runs done"
+    echo "train_user all runs done"
+
+    echo "Cleaning previous logs and done files..."
+    rm -f "$LOG_DIR"/*.log "$LOG_DIR"/*.done || true
+
 done
 
-echo "🎉 ALL DONE"
+echo "ALL DONE"

@@ -7,8 +7,7 @@ import sys
 import math
 import torch
 import numpy as np
-from scipy.stats import norm 
-from damed_pytorch import DAMEDMedian
+from scipy.stats import norm
 
 from modules.base_utils.datasets import get_matching_datasets, pick_poisoner, get_n_classes
 from modules.base_utils.util import extract_toml, get_module_device, get_mtt_attack_info, \
@@ -18,9 +17,6 @@ from modules.federated_generate_labels.utils import coalesce_attack_config, extr
                                                     extract_labels, sgd_step
 from modules.base_utils.aggregator.trmean import aggr_trmean
 from modules.base_utils.aggregator.krum import aggregate as aggr_krum
-
-#damed = DAMEDMedian(tau=0.1)
-
 
 def cosine_similarity_list(grads_a, grads_b, eps=1e-8):
     dot, na, nb = 0.0, 0.0, 0.0

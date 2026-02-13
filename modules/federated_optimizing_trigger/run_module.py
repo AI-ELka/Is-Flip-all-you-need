@@ -235,8 +235,10 @@ def optimize_trigger_step_federated(
     plt.imshow(delta_img)
     plt.title("Optimized Trigger (Delta)")
     plt.axis("off")
+    os.makedirs("out/optimizing_trigger", exist_ok=True)
     plt.savefig(f"out/optimizing_trigger/fed_opt_trig_{init}_{model_flag}_{dataset_flag}_{agg_method}_{num_poisoned}vs{num_honests}.png")
 
+    os.makedirs("optimized_trigger", exist_ok=True)
     torch.save(
         delta.cpu(),
         f"optimized_trigger/fed_opt_trig_{init}_{model_flag}_{dataset_flag}_{agg_method}_{num_poisoned}vs{num_honests}.pt",
