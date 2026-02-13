@@ -97,30 +97,56 @@ for aggregator in "${AGGREGATORS[@]}"; do
     TOTAL_JOBS=${#JOBS[@]}
     INDEX=0
 
-    while [ $INDEX -lt $TOTAL_JOBS ]; do
-        DONE_FILES=()
+    echo "Total jobs: $TOTAL_JOBS"
 
-        echo "[BATCH] Launching jobs $INDEX → $((INDEX + N_MACHINES - 1))"
+    declare -a running
+    for ((i=0; i<N_MACHINES; i++)); do running[i]=""; done
 
-        for ((i=0; i<N_MACHINES && INDEX<TOTAL_JOBS; i++)); do
-            IFS='|' read -r run_id budget <<< "${JOBS[$INDEX]}"
-            machine=${MACHINES[$i]}
+    while true; do
 
-            config="federated_experiments/${MODEL_FLAG}/${NUM_POISONED}vs${NUM_CLEAN}/${DATASET}/${ATTACK}/${aggregator}/${POISONER}/train_user_${budget}/${run_id}"
+        # Assign jobs to free machines
+        for ((i=0; i<N_MACHINES; i++)); do
 
-            safe_name="${MODEL_FLAG}_${NUM_POISONED}vs${NUM_CLEAN}_${DATASET}_${ATTACK}_${aggregator}_${POISONER}_${run_id}_${machine}"
-            done_file="$LOG_DIR/${safe_name}.done"
-            log_file="$LOG_DIR/${safe_name}.log"
-            rm -f "$done_file"
+            # If machine is not running and there are still jobs to run
+            if [ -z "${running[i]:-}" ] && [ $INDEX -lt $TOTAL_JOBS ]; then
+                IFS='|' read -r run_id budget <<< "${JOBS[$INDEX]}"
+                machine=${MACHINES[$i]}
 
-            run_remote "$machine" "python run_experiment.py $config" "$done_file" "$log_file" &
+                config="federated_experiments/${MODEL_FLAG}/${NUM_POISONED}vs${NUM_CLEAN}/${DATASET}/${ATTACK}/${aggregator}/${POISONER}/train_user_${budget}/${run_id}"
 
-            DONE_FILES+=("$done_file")
-            INDEX=$((INDEX + 1))
+                safe_name="${MODEL_FLAG}_${NUM_POISONED}vs${NUM_CLEAN}_${DATASET}_${ATTACK}_${aggregator}_${POISONER}_${run_id}_${machine}"
+                done_file="$LOG_DIR/${safe_name}.done"
+                log_file="$LOG_DIR/${safe_name}.log"
+                rm -f "$done_file"
+
+                run_remote "$machine" "python run_experiment.py $config" "$done_file" "$log_file" &
+                running[i]=$done_file
+                INDEX=$((INDEX + 1))
+                echo "[POOL] $machine ← job $INDEX/$TOTAL_JOBS"
+            fi
         done
 
-        wait_for_done_files "${DONE_FILES[@]}"
-        echo "Batch completed"
+
+        # Break the loop if all machines are idle and there are no more jobs to run
+        all_idle=true
+        for ((i=0; i<N_MACHINES; i++)); do
+            [ -n "${running[i]:-}" ] && all_idle=false && break
+        done
+        if $all_idle && [ $INDEX -ge $TOTAL_JOBS ]; then
+            break
+        fi
+
+        # Wait at least one machine to finish, then asing a new job
+        while true; do
+            for ((i=0; i<N_MACHINES; i++)); do
+                if [ -n "${running[i]:-}" ] && [ -f "${running[i]}" ]; then
+                    running[i]=""
+                    break 2
+                fi
+            done
+            sleep 5
+        done
+
     done
 
     echo "train_user all runs done"
