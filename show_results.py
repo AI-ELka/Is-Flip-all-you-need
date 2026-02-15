@@ -304,16 +304,16 @@ def plot_cta_vs_pta_single_run_multi_aggregators(
 if __name__ == "__main__":
 
     DATASET = "cifar"  # or "svhn"
-    AGGREGATORS = ["mean", "median", "krum"]
-    BUDGETS = [150, 300, 500, 1000, 2000, 2500, 5000]
-    RUNS = range(1, 11)
+    AGGREGATORS = ["trmean", "krum", "median"]
+    BUDGETS = [150, 300, 500, 1000, 1500, 2000, 2500, 5000]
+    RUNS = range(1, 6)
 
     BASE_PATH = "."
-    OUTPUT_DIR = "./plots"
-    CSV_DIR = "./results_csv"
+    OUTPUT_DIR = "./plots_genlabels"
+    CSV_DIR = "./results_csv_genlabels"
     RUN_PLOTS_DIR = "./plots_per_run"
-    NUM_POISONED = 4
-    NUM_CLEAN = 6
+    NUM_POISONED = 3
+    NUM_CLEAN = 7
     ATTACK = "backdoor"
 
     os.makedirs(CSV_DIR, exist_ok=True)
@@ -369,7 +369,7 @@ if __name__ == "__main__":
                     dfs_run_by_agg,
                     dataset=DATASET,
                     run=run,
-                    save_path=f"./plots/{DATASET}_cta_vs_pta_run_{run}_agg_comparison.png",
+                    save_path=f"./plots_genlabels/{DATASET}_cta_vs_pta_run_{run}_agg_comparison.png",
                 )
 
     # ==============================
@@ -378,5 +378,5 @@ if __name__ == "__main__":
     plot_cta_vs_pta_multi_aggregators(
         dfs_by_agg,
         dataset=DATASET,
-        save_path=f"./plots/{DATASET}_cta_vs_pta_aggregator_comparison.png",
+        save_path=f"./plots_genlabels/{DATASET}_cta_vs_pta_aggregator_comparison.png",
     )

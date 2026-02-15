@@ -7,7 +7,7 @@ from pathlib import Path
 # ==========================
 NUM_POISONED = 3
 NUM_CLEAN = 7
-ATTACK = "stealthy_backdoor"
+ATTACK = "backdoor"
 DATASET = "cifar"
 AGGREGATORS = ["mean", "median", "krum", "trmean"]
 BUDGETS = [150, 300, 500, 1000, 1500, 2000, 2500, 5000]
