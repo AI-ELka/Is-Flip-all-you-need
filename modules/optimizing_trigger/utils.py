@@ -10,6 +10,113 @@ from torchvision import transforms
 from torch.utils.data import Subset, ConcatDataset
 import numpy as np
 
+
+# ---------------------------------------------------------------------------
+# Perceptual losses: SSIM and LPIPS
+# ---------------------------------------------------------------------------
+
+def _gaussian_kernel_1d(size: int, sigma: float) -> torch.Tensor:
+    coords = torch.arange(size, dtype=torch.float32) - size // 2
+    g = torch.exp(-(coords ** 2) / (2 * sigma ** 2))
+    g /= g.sum()
+    return g
+
+
+def _gaussian_kernel_2d(size: int, sigma: float) -> torch.Tensor:
+    g1d = _gaussian_kernel_1d(size, sigma)
+    return g1d[:, None] * g1d[None, :]
+
+
+def ssim(
+    x: torch.Tensor,
+    y: torch.Tensor,
+    window_size: int = 11,
+    sigma: float = 1.5,
+    data_range: float = 1.0,
+) -> torch.Tensor:
+    """Differentiable SSIM between two batches of images in [0, data_range].
+
+    Returns a scalar in [-1, 1] (1 = identical).
+    """
+    C1 = (0.01 * data_range) ** 2
+    C2 = (0.03 * data_range) ** 2
+
+    if x.dim() == 3:
+        x = x.unsqueeze(0)
+        y = y.unsqueeze(0)
+
+    C = x.shape[1]
+    kernel = _gaussian_kernel_2d(window_size, sigma).to(x.device, x.dtype)
+    kernel = kernel.unsqueeze(0).unsqueeze(0).expand(C, 1, -1, -1)
+
+    pad = window_size // 2
+
+    mu_x = F.conv2d(x, kernel, padding=pad, groups=C)
+    mu_y = F.conv2d(y, kernel, padding=pad, groups=C)
+
+    mu_x_sq = mu_x ** 2
+    mu_y_sq = mu_y ** 2
+    mu_xy = mu_x * mu_y
+
+    sigma_x_sq = F.conv2d(x * x, kernel, padding=pad, groups=C) - mu_x_sq
+    sigma_y_sq = F.conv2d(y * y, kernel, padding=pad, groups=C) - mu_y_sq
+    sigma_xy = F.conv2d(x * y, kernel, padding=pad, groups=C) - mu_xy
+
+    num = (2 * mu_xy + C1) * (2 * sigma_xy + C2)
+    den = (mu_x_sq + mu_y_sq + C1) * (sigma_x_sq + sigma_y_sq + C2)
+
+    return (num / den).mean()
+
+
+class PerceptualLoss:
+    """Configurable perceptual loss: SSIM or LPIPS.
+
+    Usage::
+
+        percep = PerceptualLoss("ssim", device="cuda")
+        loss = percep(x_clean_raw, x_poisoned_raw)   # images in [0, 1]
+    """
+
+    def __init__(self, loss_type: str = "ssim", device: str = "cuda"):
+        self.loss_type = loss_type.lower()
+        self._lpips_fn = None
+        if self.loss_type == "lpips":
+            try:
+                import lpips
+            except ImportError:
+                raise ImportError(
+                    "lpips package is required for LPIPS loss. "
+                    "Install it with: pip install lpips"
+                )
+            self._lpips_fn = lpips.LPIPS(net="alex").to(device).eval()
+            for p in self._lpips_fn.parameters():
+                p.requires_grad_(False)
+        elif self.loss_type != "ssim":
+            raise ValueError(
+                f"Unknown perceptual loss type '{loss_type}'. "
+                "Choose 'ssim' or 'lpips'."
+            )
+
+    def __call__(
+        self,
+        x_clean: torch.Tensor,
+        x_poisoned: torch.Tensor,
+    ) -> torch.Tensor:
+        """Compute perceptual loss between clean and poisoned images in [0,1].
+
+        Returns a scalar to **minimise** (lower = more perceptually similar).
+        """
+        if self.loss_type == "ssim":
+            # SSIM ∈ [-1,1]; 1 means identical → loss = 1 - SSIM
+            return 1.0 - ssim(x_clean, x_poisoned)
+        elif self.loss_type == "lpips":
+            # LPIPS expects images in [-1, 1]
+            x_c = 2.0 * x_clean - 1.0
+            x_p = 2.0 * x_poisoned - 1.0
+            return self._lpips_fn(x_c, x_p).mean()
+        else:
+            raise ValueError(self.loss_type)
+
 RAW_TRANSFORM_X = transforms.ToTensor()
 RAW_TRANSFORM_Y = lambda y: y
 CIFAR_MEAN = torch.tensor(CIFAR_TRANSFORM_NORMALIZE_MEAN)

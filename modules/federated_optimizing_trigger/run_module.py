@@ -1,6 +1,6 @@
 from modules.base_utils.datasets import get_n_classes, pick_poisoner
 from modules.base_utils.util import get_train_info, mini_train, load_model,either_dataloader_dataset_to_both, extract_toml, slurmify_path, make_pbar
-from modules.optimizing_trigger.utils import sample_checkpoints, cosine_grad_loss, compute_batch_gradients, trigger_penalty, get_mu, extract_experts, get_clean_dataset, get_poison_dataset, move_to_device, init_delta, raw_to_preprocess, raw_to_trigger_preprocess, get_raw_clean_dataset, match_loss
+from modules.optimizing_trigger.utils import sample_checkpoints, cosine_grad_loss, compute_batch_gradients, trigger_penalty, get_mu, extract_experts, get_clean_dataset, get_poison_dataset, move_to_device, init_delta, raw_to_preprocess, raw_to_trigger_preprocess, get_raw_clean_dataset, match_loss, PerceptualLoss
 from modules.train_expert.utils import checkpoint_callback
 from modules.base_utils.aggregator.trmean import aggr_trmean
 from modules.base_utils.aggregator.multikrum import aggregate as aggr_multikrum
@@ -73,6 +73,8 @@ def optimize_trigger_step_federated(
     dataset_flag="cifar",
     init="stripe",
     model_flag="r32p",
+    lambda_perceptual=0.0,
+    perceptual_loss_fn=None,
 ):
     sampled_k = sample_checkpoints(
         len(expert_models),
@@ -102,6 +104,8 @@ def optimize_trigger_step_federated(
 
         adv_loss_sum = 0.0
         adv_count = 0
+        percep_loss_sum = 0.0
+        percep_count = 0
 
         for k in sampled_k:
 
@@ -165,6 +169,15 @@ def optimize_trigger_step_federated(
                     adv_loss_sum += loss_fn(logits_adv, y_poison)
                     adv_count += 1
 
+                    # --- perceptual loss (raw [0,1] space) ---
+                    if perceptual_loss_fn is not None and lambda_perceptual > 0:
+                        x_raw_clean_src = x_raw[mask]                # [0,1]
+                        x_raw_poison_src = (x_raw[mask] + delta).clamp(0, 1) # raw_to_trigger_preprocess(x_raw[mask], delta) # [0,1]
+                        percep_loss_sum += perceptual_loss_fn(
+                            x_raw_clean_src, x_raw_poison_src
+                        )
+                        percep_count += 1
+
             agg_mix = federated_aggregate(
                 params,
                 grad_buf_mix,
@@ -200,11 +213,17 @@ def optimize_trigger_step_federated(
 
         L_pen = trigger_penalty(delta, mu)
 
+        if percep_count > 0:
+            L_percep = percep_loss_sum / percep_count
+        else:
+            L_percep = torch.tensor(0.0, device=device)
+
         L_tot = (
             lambda_match * L_match
             + lambda_adv * L_adv
             + lambda_penalty * L_pen
             + lambda_delta * delta.norm()
+            + lambda_perceptual * L_percep
         )
 
         L_tot.backward()
@@ -217,6 +236,7 @@ def optimize_trigger_step_federated(
             "L_match": f"{L_match.item():.6f}",
             "L_adv": f"{L_adv.item():.4f}",
             "L_pen": f"{L_pen.item():.4f}",
+            "L_percep": f"{L_percep.item():.4f}",
             "||delta||": f"{delta.norm().item():.4f}",
         })
 
@@ -279,6 +299,8 @@ def optimize_trigger(
     init="stripe",
     num_honests=5,
     num_poisoned=5,
+    lambda_perceptual=0.0,
+    perceptual_loss_type="ssim",
 ):
     optim_kwargs = optim_kwargs or {}
     scheduler_kwargs = scheduler_kwargs or {}
@@ -297,6 +319,13 @@ def optimize_trigger(
     delta.requires_grad_(True)
 
     optimizer_delta = torch.optim.Adam([delta], lr=lr_delta)
+
+    # Build perceptual loss function (SSIM or LPIPS)
+    if lambda_perceptual > 0:
+        perceptual_loss_fn = PerceptualLoss(perceptual_loss_type, device=device)
+        print(f"Perceptual loss: {perceptual_loss_type.upper()}, lambda={lambda_perceptual}")
+    else:
+        perceptual_loss_fn = None
 
     raw_train_dataset = get_raw_clean_dataset(dataset_flag, train=True)
     
@@ -383,7 +412,9 @@ def optimize_trigger(
                         num_chckpt=num_chckpt,
                         epsilon=epsilon,
                         device=device,
-                        dataset_flag=dataset_flag
+                        dataset_flag=dataset_flag,
+                        lambda_perceptual=lambda_perceptual,
+                        perceptual_loss_fn=perceptual_loss_fn,
                     )
 
         del expert_models
@@ -421,6 +452,8 @@ def run(experiment_name, module_name, **kwargs):
     lambda_penalty = args.get("lambda_penalty", 0.0)
     lambda_rho = args.get("lambda_rho", 0.0)
     lambda_delta = args.get("lambda_delta", 0.0)
+    lambda_perceptual = args.get("lambda_perceptual", 0.0)
+    perceptual_loss_type = args.get("perceptual_loss_type", "ssim")
 
     epsilon = args.get("epsilon", 0.1)
     lr_delta = args.get("lr_delta", 1e-2)
@@ -477,7 +510,9 @@ def run(experiment_name, module_name, **kwargs):
         device=device,
         expert_config=expert_config,
         expert_path=expert_path,
-        init=init
+        init=init,
+        lambda_perceptual=lambda_perceptual,
+        perceptual_loss_type=perceptual_loss_type,
     )
 
     print("Optimized trigger obtained.")
