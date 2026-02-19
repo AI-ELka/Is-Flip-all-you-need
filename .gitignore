@@ -157,5 +157,9 @@ plots/
 plots*/
 results*/
 examples/
-logs/
+logs*/
 locks/
+
+lightning_logs/
+
+.gitignore
