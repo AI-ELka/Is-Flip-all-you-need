@@ -3,7 +3,7 @@ from modules.base_utils.util import get_train_info, mini_train, load_model,eithe
 from modules.optimizing_trigger.utils import sample_checkpoints, cosine_grad_loss, compute_batch_gradients, trigger_penalty, get_mu, extract_experts, get_clean_dataset, get_poison_dataset, move_to_device, init_delta, raw_to_preprocess, raw_to_trigger_preprocess, get_raw_clean_dataset, match_loss
 from modules.train_expert.utils import checkpoint_callback
 from modules.base_utils.aggregator.trmean import aggr_trmean
-from modules.base_utils.aggregator.krum import aggregate as aggr_krum
+from modules.base_utils.aggregator.multikrum import aggregate as aggr_multikrum
 import torch
 from pathlib import Path
 import os
@@ -28,8 +28,10 @@ def federated_aggregate(params, grad_buf, method, f=1):
             g = grads.median(dim=0).values
         elif method == "trmean":
             g = aggr_trmean(grads, f=f)
+        elif method == "multikrum":
+            g = aggr_multikrum(grads, f=f)
         elif method == "krum":
-            g = aggr_krum(grads, f=f)
+            g = aggr_multikrum(grads, f=f, m=1)
         else:
             raise ValueError(method)
 
@@ -230,7 +232,7 @@ def optimize_trigger_step_federated(
     # f"out/optimizing_trigger/fed_opt_trig_{dataset_flag}_{agg_method}_{num_poisoned}_{num_honests}.pt",
     # )
     
-    delta_img = delta.cpu().numpy().transpose(1, 2, 0)
+    delta_img = delta.detach().cpu().numpy().transpose(1, 2, 0)
     delta_img = (delta_img - delta_img.min()) / (delta_img.max() - delta_img.min() + 1e-8)
     plt.imshow(delta_img)
     plt.title("Optimized Trigger (Delta)")
@@ -238,9 +240,10 @@ def optimize_trigger_step_federated(
     os.makedirs("out/optimizing_trigger", exist_ok=True)
     plt.savefig(f"out/optimizing_trigger/fed_opt_trig_{init}_{model_flag}_{dataset_flag}_{agg_method}_{num_poisoned}vs{num_honests}.png")
 
+    delta_save = delta.detach().cpu()
     os.makedirs("optimized_trigger", exist_ok=True)
     torch.save(
-        delta.cpu(),
+        delta_save,
         f"optimized_trigger/fed_opt_trig_{init}_{model_flag}_{dataset_flag}_{agg_method}_{num_poisoned}vs{num_honests}.pt",
     )
 
@@ -479,15 +482,17 @@ def run(experiment_name, module_name, **kwargs):
 
     print("Optimized trigger obtained.")
 
-    delta_img = optimized_delta.cpu().numpy().transpose(1, 2, 0)
+    os.makedirs("out/optimizing_trigger", exist_ok=True)
+    delta_img = optimized_delta.detach().cpu().numpy().transpose(1, 2, 0)
     delta_img = (delta_img - delta_img.min()) / (delta_img.max() - delta_img.min() + 1e-8)
     plt.imshow(delta_img)
     plt.title("Optimized Trigger (Delta)")
     plt.axis("off")
     plt.savefig(f"out/optimizing_trigger/fed_opt_trig_{init}_{model_flag}_{dataset_flag}_{agg_method}_{num_poisoned}vs{num_honests}.png")
 
+    os.makedirs("optimized_trigger", exist_ok=True)
     torch.save(
-        optimized_delta.cpu(),
+        optimized_delta.detach().cpu(),
         f"optimized_trigger/fed_opt_trig_{init}_{model_flag}_{dataset_flag}_{agg_method}_{num_poisoned}vs{num_honests}.pt",
     )
 

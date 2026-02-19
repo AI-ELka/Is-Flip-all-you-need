@@ -16,7 +16,7 @@ from modules.base_utils.util import extract_toml, get_module_device, get_mtt_att
 from modules.federated_generate_labels.utils import coalesce_attack_config, extract_experts, \
                                                     extract_labels, sgd_step
 from modules.base_utils.aggregator.trmean import aggr_trmean
-from modules.base_utils.aggregator.krum import aggregate as aggr_krum
+from modules.base_utils.aggregator.multikrum import aggregate as aggr_multikrum
 
 def cosine_similarity_list(grads_a, grads_b, eps=1e-8):
     dot, na, nb = 0.0, 0.0, 0.0
@@ -44,8 +44,10 @@ def agg(params, grad_buf, method, f=1):
 
         elif method == "trmean":
             g = aggr_trmean(grads, f=f)
+        elif method == "multikrum":
+            g = aggr_multikrum(grads, f=f)
         elif method == "krum":
-            g = aggr_krum(grads, f=f)
+            g = aggr_multikrum(grads, f=f, m=1)
         else:
             raise ValueError(method)
         p.grad = g

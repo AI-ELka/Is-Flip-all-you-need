@@ -31,6 +31,8 @@ def compute_cta_pta_mean_var(
     num_poisoned=1,
     num_clean=2,
     attack="backdoor",
+    poisoner_flag="1xs",
+    model_flag="r32p",
 ):
     records = []
 
@@ -40,7 +42,7 @@ def compute_cta_pta_mean_var(
         for run in runs:
             run_dir = os.path.join(
                 base_path,
-                f"out/{num_poisoned}vs{num_clean}/{dataset}/{attack}/{aggregator}",
+                f"out/{model_flag}/{num_poisoned}vs{num_clean}/{dataset}/{attack}/{aggregator}/{poisoner_flag}",
                 str(run),
                 str(budget),
             )
@@ -122,13 +124,15 @@ def collect_cta_pta_per_run(
     num_poisoned=1,
     num_clean=2,
     attack="backdoor",
+    poisoner_flag="1xs",
+    model_flag="r32p",
 ):
     records = []
 
     for budget in budgets:
         run_dir = os.path.join(
             base_path,
-            f"out/{num_poisoned}vs{num_clean}/{dataset}/{attack}/{aggregator}",
+            f"out/{model_flag}/{num_poisoned}vs{num_clean}/{dataset}/{attack}/{aggregator}/{poisoner_flag}",
             str(run),
             str(budget),
         )
@@ -304,17 +308,19 @@ def plot_cta_vs_pta_single_run_multi_aggregators(
 if __name__ == "__main__":
 
     DATASET = "cifar"  # or "svhn"
-    AGGREGATORS = ["mean", "median", "trmean", "krum"]#, "krum"
+    AGGREGATORS = ["mean", "median", "trmean", "multikrum"]#, "krum"
     BUDGETS = [150, 300, 500, 1000, 2000, 2500, 5000]
-    RUNS = range(1, 6)
+    RUNS = range(1, 11)
 
     BASE_PATH = "."
     OUTPUT_DIR = "./plots"
     CSV_DIR = "./results_csv"
     RUN_PLOTS_DIR = "./plots_per_run"
-    NUM_POISONED = 4
-    NUM_CLEAN = 6
+    NUM_POISONED = 3
+    NUM_CLEAN = 7
     ATTACK = "backdoor"
+    MODEL_FLAG = "r32p"
+    POISONER_FLAG = "optimized"
 
     os.makedirs(CSV_DIR, exist_ok=True)
 
@@ -335,13 +341,15 @@ if __name__ == "__main__":
             num_poisoned=NUM_POISONED,
             num_clean=NUM_CLEAN,
             attack=ATTACK,
+            poisoner_flag=POISONER_FLAG,
+            model_flag=MODEL_FLAG,
         )
 
         dfs_by_agg[aggregator] = df_mean
 
         # Save CSV
         csv_path = os.path.join(
-            CSV_DIR, f"{DATASET}_{aggregator}_cta_pta_mean_var.csv"
+            CSV_DIR, f"{MODEL_FLAG}_{POISONER_FLAG}_{DATASET}_{aggregator}_cta_pta_mean_var.csv"
         )
         df_mean.to_csv(csv_path, index=False)
         print(f"[INFO] Saved CSV: {csv_path}")
@@ -359,6 +367,8 @@ if __name__ == "__main__":
                     num_poisoned=NUM_POISONED,
                     num_clean=NUM_CLEAN,
                     attack=ATTACK,
+                    poisoner_flag=POISONER_FLAG,
+                    model_flag=MODEL_FLAG,
                 )
 
                 if not df_run.empty:
@@ -369,7 +379,7 @@ if __name__ == "__main__":
                     dfs_run_by_agg,
                     dataset=DATASET,
                     run=run,
-                    save_path=f"./plots/{DATASET}_cta_vs_pta_run_{run}_agg_comparison.png",
+                    save_path=f"./plots/{MODEL_FLAG}_{POISONER_FLAG}_{DATASET}_cta_vs_pta_run_{run}_agg_comparison.png",
                 )
 
     # ==============================
@@ -378,5 +388,5 @@ if __name__ == "__main__":
     plot_cta_vs_pta_multi_aggregators(
         dfs_by_agg,
         dataset=DATASET,
-        save_path=f"./plots/{DATASET}_cta_vs_pta_aggregator_comparison.png",
+        save_path=f"./plots/{MODEL_FLAG}_{POISONER_FLAG}_{DATASET}_cta_vs_pta_aggregator_comparison.png",
     )
