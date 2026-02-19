@@ -12,7 +12,7 @@ import torch.backends.cudnn as cudnn
 import toml
 from collections import OrderedDict
 from modules.base_utils.aggregator.trmean import aggr_trmean
-from modules.base_utils.aggregator.krum import aggregate as aggr_krum
+from modules.base_utils.aggregator.multikrum import aggregate as aggr_multikrum
 
 from modules.base_utils.datasets import make_dataloader
 
@@ -356,8 +356,10 @@ def mini_train_multi(
                         agg_grad = grads.median(dim=0).values
                     elif agg_method == "trmean":
                         agg_grad = aggr_trmean(grads, f=f)
+                    elif agg_method == "multikrum":
+                        agg_grad = aggr_multikrum(grads, f=f)
                     elif agg_method == "krum":
-                        agg_grad = aggr_krum(grads, f=f)
+                        agg_grad = aggr_multikrum(grads, f=f, m=1)
                     else:
                         raise ValueError(f"Unknown agg_method: {agg_method}")
 
