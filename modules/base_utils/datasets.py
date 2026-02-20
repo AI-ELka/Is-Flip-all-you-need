@@ -684,7 +684,7 @@ def plot_poisoned_examples(save_path="./plots/comparison_trigger.png", seed=42):
     torch.manual_seed(seed)
 
     dataset_flags = ["cifar"]
-    aggregator_flags = ["mean", "median", "trmean", "multikrum"]
+    aggregator_flags = ["mean", "median", "trmean", "krum", "multikrum"]
 
     poison_titles = {
         "original": "Clean image",
@@ -754,5 +754,5 @@ def plot_poisoned_examples(save_path="./plots/comparison_trigger.png", seed=42):
     print(f"Saved comparison figure to {save_path}")
     plt.show()
 
-
-plot_poisoned_examples()
+if __name__ == "__main__":
+    plot_poisoned_examples()

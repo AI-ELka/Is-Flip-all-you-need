@@ -94,6 +94,8 @@ agg_method = "{aggregator}"
 output_dir = "/Data/mb/flip/out/{model_flag}/{num_poisoned}vs{num_clean}/{dataset}/{attack}/{aggregator}/{poisoner}/trigger/"
 init = "{init}"
 
+device = "cuda"
+
 # Loss weights
 lambda_match = {lambda_match}
 lambda_adv = {lambda_adv}
@@ -110,9 +112,9 @@ alpha_ckpt = {alpha_ckpt}
 num_chckpt = {num_chckpt}
 
 # Expert trajectory configuration
-expert_path = "/Data/mb/flip/out/checkpoints/{model_flag}_{poisoner}/{{}}/model_{{}}_{{}}.pth"
+expert_path = "/Data/mb/flip/out/checkpoints/r32p_1xs/{{}}/model_{{}}_{{}}.pth" 
 """
-# [federated_optimizing_trigger.expert_config]
+# [federated_optimizing_trigger.expert_config] #"/Data/mb/flip/out/checkpoints/r32p_1xs/{}/model_{}_{}.pth"
 # experts = 1
 # min = 0
 # max = 20
