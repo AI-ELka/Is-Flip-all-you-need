@@ -127,7 +127,7 @@ def run(experiment_name, module_name, **kwargs):
     print("Saving results...")
     np.save(output_dir / "paccs.npy", poison_metrics)
     np.save(output_dir / "caccs.npy", clean_metrics)
-    torch.save(model_retrain.state_dict(), output_dir / "model.pth")
+    #torch.save(model_retrain.state_dict(), output_dir / "model.pth")
 
 
 if __name__ == "__main__":

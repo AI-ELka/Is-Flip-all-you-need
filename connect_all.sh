@@ -1,8 +1,7 @@
 #!/bin/bash
 
-BASE_DIR="$HOME/FLIP"
-
-MACHINES=(
+# Liste complète des machines
+hosts=(
 # Salle 30
 allemagne
 angleterre
@@ -181,19 +180,25 @@ venturi
 volvo
 )
 
-for m in "${MACHINES[@]}"; do
-    echo "==== $m ===="
+PYTHON_SCRIPT="~/test_script.py"
 
-    if ssh -o BatchMode=yes -o ConnectTimeout=5 "$m" "echo ok" &>/dev/null; then
-        ssh "$m" "
-            pkill -f 'python run_experiment.py' || true
-            pkill -f 'bash -c python run_experiment.py' || true
-            pkill -f '$BASE_DIR' || true
-        "
-        echo "✔ Killed on $m"
-    else
-        echo "❌ Cannot SSH to $m"
-    fi
+# afficher la longueur de la liste des machines
+echo "Nombre de machines : ${#hosts[@]}"
+
+for h in "${hosts[@]}"; do
+    echo "Connexion à $h et test du script Python ..."
+    
+    ssh -o StrictHostKeyChecking=accept-new martin.beaufils@$h "
+        if command -v python3 >/dev/null 2>&1; then
+            echo 'Python3 trouvé sur $h'
+            if [ -f $PYTHON_SCRIPT ]; then
+                echo 'Lancement du script $PYTHON_SCRIPT'
+                python3 $PYTHON_SCRIPT
+            else
+                echo 'Le script $PYTHON_SCRIPT n existe pas sur $h'
+            fi
+        else
+            echo 'Python3 n est pas installé sur $h'
+        fi
+    "
 done
-
-echo "🔥 Kill done."
