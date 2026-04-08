@@ -1,5 +1,5 @@
 from modules.base_utils.datasets import get_n_classes, pick_poisoner
-from modules.base_utils.util import get_train_info, mini_train, load_model,either_dataloader_dataset_to_both, extract_toml, slurmify_path, make_pbar
+from modules.base_utils.util import get_train_info, mini_train, load_model,either_dataloader_dataset_to_both, extract_toml, slurmify_path, make_pbar, need_big_ims
 from modules.optimizing_trigger.utils import sample_checkpoints, cosine_grad_loss, compute_batch_gradients, trigger_penalty, get_mu, extract_experts, get_clean_dataset, get_poison_dataset, move_to_device, init_delta, raw_to_preprocess, raw_to_trigger_preprocess, get_raw_clean_dataset, match_loss
 from modules.train_expert.utils import checkpoint_callback
 import torch
@@ -174,6 +174,8 @@ def optimize_trigger(
 
     checkpoints_start = extract_experts(expert_config, expert_path)
 
+    big_ims = need_big_ims(dataset_flag)
+
     for step in range(n_steps):
         print(f"\n=== Trigger optimization step {step+1}/{n_steps} ===")
 
@@ -189,25 +191,25 @@ def optimize_trigger(
         )
 
         poison_train_dataset = get_poison_dataset(
-            dataset_flag,
-            source_label,
-            target_label,
-            delta_eval,
+            dataset_flag=dataset_flag,
+            source_label=source_label,
+            target_label=target_label,
+            delta=delta_eval,
             train=True,
-            big=False,
+            big=big_ims,
         )
 
         clean_test_dataset = get_clean_dataset(
-            dataset_flag, train=False, big=False
+            dataset_flag=dataset_flag, train=False, big=big_ims
         )
 
         poison_test_dataset = get_poison_dataset(
-            dataset_flag,
-            source_label,
-            target_label,
-            delta_eval,
+            dataset_flag=dataset_flag,
+            source_label=source_label,
+            target_label=target_label,
+            delta=delta_eval,
             train=False,
-            big=False,
+            big=big_ims,
         )
 
         mini_train(

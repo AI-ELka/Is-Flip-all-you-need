@@ -186,19 +186,17 @@ PYTHON_SCRIPT="~/test_script.py"
 echo "Nombre de machines : ${#hosts[@]}"
 
 for h in "${hosts[@]}"; do
-    echo "Connexion à $h et test du script Python ..."
-    
-    ssh -o StrictHostKeyChecking=accept-new martin.beaufils@$h "
+    echo "Connexion à $h ..."
+
+    ssh -o StrictHostKeyChecking=accept-new martin.beaufils@$h '
         if command -v python3 >/dev/null 2>&1; then
-            echo 'Python3 trouvé sur $h'
-            if [ -f $PYTHON_SCRIPT ]; then
-                echo 'Lancement du script $PYTHON_SCRIPT'
-                python3 $PYTHON_SCRIPT
-            else
-                echo 'Le script $PYTHON_SCRIPT n existe pas sur $h'
-            fi
+            echo "[OK] Python3 trouvé sur '"$h"'"
+            
+            echo "[TEST] Version Python :"
+            python3 --version
+
         else
-            echo 'Python3 n est pas installé sur $h'
+            echo "[ERROR] Python3 non installé sur '"$h"'"
         fi
-    "
+    '
 done

@@ -1,6 +1,7 @@
 import random
 import numpy as np
 import torch
+import torch.nn.functional as F
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset, ConcatDataset, Subset
 from torchvision import datasets, transforms
@@ -115,7 +116,7 @@ TINY_IMAGENET_TRANSFORM_TEST = transforms.Compose(
 PATH = {
     'cifar': Path("./data/data_cifar10"),
     'cifar_100': Path("./data/data_cifar100"),
-    'tiny_imagenet': "/scr/tiny-imagenet-200",
+    'tiny_imagenet': "./data/tiny-imagenet-200",
     'svhn': Path("./data/data_svhn"),
 }
 
@@ -372,15 +373,34 @@ class StripePoisoner(Poisoner):
         mix = np.asarray(x) + self.strength * mask
         return Image.fromarray(np.uint8(mix.clip(0, 255)))
 
+# class OptimizedPoisoner(Poisoner):
+#     def __init__(self, delta: torch.Tensor):
+#         self.perturbation = delta
+    
+#     def poison(self, x: Image.Image) -> Image.Image:
+#         x_tensor = transforms.ToTensor()(x).unsqueeze(0)
+#         poisoned_tensor = (x_tensor + self.perturbation).clamp(0, 1).squeeze(0)
+#         poisoned_image = transforms.ToPILImage()(poisoned_tensor)
+#         return poisoned_image
+
 class OptimizedPoisoner(Poisoner):
     def __init__(self, delta: torch.Tensor):
-        self.perturbation = delta
+        self.perturbation = delta.detach()
     
     def poison(self, x: Image.Image) -> Image.Image:
-        x_tensor = transforms.ToTensor()(x).unsqueeze(0)
-        poisoned_tensor = (x_tensor + self.perturbation).clamp(0, 1).squeeze(0)
-        poisoned_image = transforms.ToPILImage()(poisoned_tensor)
-        return poisoned_image
+        x_tensor = transforms.ToTensor()(x)  # [C, H, W], pas de unsqueeze
+
+        delta = self.perturbation
+        if delta.shape[-2:] != x_tensor.shape[-2:]:
+            delta = F.interpolate(
+                delta.unsqueeze(0),           # [1, C, H, W]
+                size=x_tensor.shape[-2:],
+                mode='bilinear',
+                align_corners=False
+            ).squeeze(0)                      # [C, H, W]
+
+        poisoned_tensor = (x_tensor + delta).clamp(0, 1)  # [C, H, W]
+        return transforms.ToPILImage()(poisoned_tensor)
 
 class RandomPoisoner(Poisoner):
     def __init__(self, poisoners: Iterable[Poisoner]):
@@ -493,7 +513,7 @@ def pick_poisoner(poisoner_flag, dataset_flag, target_label, delta=None):
     if dataset_flag in ["cifar", "cifar_100", "svhn"]:
         x_poisoner = pick_cifar_poisoner(poisoner_flag, delta=delta)
     elif dataset_flag == "tiny_imagenet":
-        x_poisoner = pick_tiny_imagenet_poisoner(poisoner_flag)
+        x_poisoner = pick_tiny_imagenet_poisoner(poisoner_flag, delta=delta)
     else:
         raise NotImplementedError()
 
@@ -556,7 +576,7 @@ def pick_cifar_poisoner(poisoner_flag, delta=None):
     return x_poisoner
 
 
-def pick_tiny_imagenet_poisoner(poisoner_flag):
+def pick_tiny_imagenet_poisoner(poisoner_flag, delta=None):
     if poisoner_flag == "1xp":
         x_poisoner = PixelPoisoner(pos=(22, 32), col=(101, 0, 25))
 
@@ -593,7 +613,18 @@ def pick_tiny_imagenet_poisoner(poisoner_flag):
 
     elif poisoner_flag == "4xl":
         x_poisoner = TurnerPoisoner(method="all-corners")
-
+        
+    elif poisoner_flag == "optimized":
+        assert delta is not None, "Delta must be provided for optimized poisoner."
+        # load delta tensor
+        if isinstance(delta, str): 
+            delta_tensor = torch.load(delta)
+        elif isinstance(delta, torch.Tensor):
+            delta_tensor = delta
+        else:
+            raise TypeError(f"delta must be a path (str) or a torch.Tensor, got {type(delta)}")
+        x_poisoner = OptimizedPoisoner(delta=delta_tensor)
+        
     else:
         raise NotImplementedError()
 
