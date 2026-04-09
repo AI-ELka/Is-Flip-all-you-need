@@ -1,5 +1,5 @@
 from modules.base_utils.datasets import get_n_classes, pick_poisoner
-from modules.base_utils.util import get_train_info, mini_train, load_model,either_dataloader_dataset_to_both, extract_toml, slurmify_path, make_pbar
+from modules.base_utils.util import get_train_info, mini_train, load_model,either_dataloader_dataset_to_both, extract_toml, slurmify_path, make_pbar, needs_big_ims
 from modules.optimizing_trigger.utils import sample_checkpoints, cosine_grad_loss, compute_batch_gradients, trigger_penalty, get_mu, extract_experts, get_clean_dataset, get_poison_dataset, move_to_device, init_delta, raw_to_preprocess, raw_to_trigger_preprocess, get_raw_clean_dataset, match_loss
 from modules.train_expert.utils import checkpoint_callback
 from modules.base_utils.aggregator.trmean import aggr_trmean
@@ -116,7 +116,7 @@ def optimize_trigger_step_federated(
             for cid, batch in enumerate(batches):
 
                 x_raw, y = move_to_device(batch, device)
-                x_clean = raw_to_preprocess(x_raw)
+                x_clean = raw_to_preprocess(x_raw, dataset_flag=dataset_flag,model_flag=model_flag)
 
                 if cid < num_honests:
 
@@ -145,7 +145,9 @@ def optimize_trigger_step_federated(
                     x_poisoned = x_clean.clone()
                     x_poisoned[mask] = raw_to_trigger_preprocess(
                         x_raw[mask],
-                        delta
+                        delta,
+                        dataset_flag=dataset_flag,
+                        model_flag=model_flag,
                     )
 
                     grads, logits_adv = compute_batch_gradients(
@@ -269,9 +271,9 @@ def optimize_trigger(
     device="cuda",
     train_flag="sgd",
     batch_size=None,
-    optim_kwargs=None,
-    scheduler_kwargs=None,
-    expert_config=None,
+    optim_kwargs={},
+    scheduler_kwargs={},
+    expert_config={},
     expert_path="/Data/mb/flip/out/checkpoints/r32p_1xs/{}/model_{}_{}.pth",
     chkpt_iters=50,
     output_dir="/Data/mb/flip/out/checkpoints/r32p_1xs/0/",
@@ -279,10 +281,8 @@ def optimize_trigger(
     init="stripe",
     num_honests=5,
     num_poisoned=5,
+    model_flag="r32p",
 ):
-    optim_kwargs = optim_kwargs or {}
-    scheduler_kwargs = scheduler_kwargs or {}
-    expert_config = expert_config or {}
 
     Path(output_dir).mkdir(parents=True, exist_ok=True)
 
@@ -307,6 +307,8 @@ def optimize_trigger(
 
     checkpoints_start = extract_experts(expert_config, expert_path)
 
+    big_ims = needs_big_ims(model_flag)
+    
     for step in range(n_steps):
         print(f"\n=== Trigger optimization step {step+1}/{n_steps} ===")
 
@@ -327,11 +329,11 @@ def optimize_trigger(
             target_label,
             delta_eval,
             train=True,
-            big=False,
+            big=big_ims,
         )
 
         clean_test_dataset = get_clean_dataset(
-            dataset_flag, train=False, big=False
+            dataset_flag, train=False, big=big_ims
         )
 
         poison_test_dataset = get_poison_dataset(
@@ -340,7 +342,7 @@ def optimize_trigger(
             target_label,
             delta_eval,
             train=False,
-            big=False,
+            big=big_ims,
         )
 
         mini_train(
@@ -383,7 +385,8 @@ def optimize_trigger(
                         num_chckpt=num_chckpt,
                         epsilon=epsilon,
                         device=device,
-                        dataset_flag=dataset_flag
+                        dataset_flag=dataset_flag,
+                        model_flag=model_flag,
                     )
 
         del expert_models
@@ -403,8 +406,6 @@ def run(experiment_name, module_name, **kwargs):
     """
 
     slurm_id = kwargs.get("slurm_id", None)
-
-    # === Load config from TOML ===
     args = extract_toml(experiment_name, module_name)
 
     dataset_flag = args["dataset"]
@@ -440,6 +441,8 @@ def run(experiment_name, module_name, **kwargs):
         assert num_honests + num_poisoned > 2 * num_poisoned + 2, \
             "Not enough honest clients for robust aggregation"
 
+    optim_kwargs = args.get("optim_kwargs", {})
+    scheduler_kwargs = args.get("scheduler_kwargs", {})
 
     output_dir = slurmify_path(args["output_dir"], slurm_id)
     Path(output_dir).mkdir(parents=True, exist_ok=True)
@@ -451,7 +454,7 @@ def run(experiment_name, module_name, **kwargs):
 
     model.eval()
 
-    mu = get_mu(dataset_flag, y_target, device)
+    mu = get_mu(dataset_flag, y_target, device, model_flag=model_flag)
 
     print("Optimizing trigger...")
     loss_fn = torch.nn.CrossEntropyLoss()
@@ -477,7 +480,11 @@ def run(experiment_name, module_name, **kwargs):
         device=device,
         expert_config=expert_config,
         expert_path=expert_path,
-        init=init
+        output_dir=f"/Data/mb/flip/out/checkpoints/{model_flag}_1xs/0/",
+        init=init, 
+        optim_kwargs=optim_kwargs,
+        scheduler_kwargs=scheduler_kwargs,
+        model_flag=model_flag,
     )
 
     print("Optimized trigger obtained.")

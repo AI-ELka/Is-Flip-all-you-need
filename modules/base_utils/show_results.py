@@ -1,24 +1,13 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
 import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-
-# ============================================================
-# Utils
-# ============================================================
 
 def get_final_value(npy_path):
     data = np.load(npy_path)
     if data.ndim > 1:
         return float(data[-1][0])
     return float(data[-1])
-
-# ============================================================
-# Core: mean / variance over runs
-# ============================================================
 
 def compute_cta_pta_mean_var(
     dataset,
@@ -70,10 +59,6 @@ def compute_cta_pta_mean_var(
 
     return pd.DataFrame.from_records(records)
 
-# ============================================================
-# Plot mean / var
-# ============================================================
-
 def plot_cta_vs_pta_mean_var(df, save_dir=None):
     plt.figure(figsize=(8, 6))
 
@@ -107,11 +92,6 @@ def plot_cta_vs_pta_mean_var(df, save_dir=None):
         path = os.path.join(save_dir, "cta_vs_pta_mean_var.png")
         plt.savefig(path)
         print(f"[INFO] Saved plot: {path}")
-
-
-# ============================================================
-# Per-run utilities
-# ============================================================
 
 def collect_cta_pta_per_run(
     dataset,
@@ -183,7 +163,6 @@ def plot_cta_vs_pta_multi_aggregators(
 
     plt.figure(figsize=(8.5, 7))
 
-    # Styles fixes (faciles à comparer)
     markers = ["o", "s", "^", "D", "v"]
     linestyles = ["-", "--", "-.", ":", "-"]
 
@@ -195,7 +174,6 @@ def plot_cta_vs_pta_multi_aggregators(
         x = df["pta_mean"].values * 100
         y = df["cta_mean"].values * 100
 
-        # Annotate budgets
         for b, xi, yi in zip(budgets, x, y):
             plt.text(
                 xi + 0.8,
@@ -204,7 +182,7 @@ def plot_cta_vs_pta_multi_aggregators(
                 fontsize=9,
                 alpha=0.8,
             )
-
+        agg_title = agg.capitalize() if agg.lower() != "median" else "CW Median"
         plt.errorbar(
             x,
             y,
@@ -218,17 +196,11 @@ def plot_cta_vs_pta_multi_aggregators(
             capsize=4,
             elinewidth=1.6,
             alpha=0.9,
-            label=f"{agg.capitalize()} aggregation",
+            label=f"{agg_title} aggregation",
         )
 
-    # -----------------------------
-    # Axes & style
-    # -----------------------------
     plt.xlabel("Poisoned Test Accuracy (%)", fontsize=13)
     plt.ylabel("Clean Test Accuracy (%)", fontsize=13)
-
-    # plt.xlim(0, 100)
-    # plt.ylim(65, 94)
 
     plt.grid(True, linestyle="--", linewidth=0.6, alpha=0.7)
     plt.legend(frameon=True, fontsize=11)
@@ -272,6 +244,8 @@ def plot_cta_vs_pta_single_run_multi_aggregators(
         for b, xi, yi in zip(budgets, x, y):
             plt.text(xi + 0.6, yi + 0.3, str(int(b)), fontsize=8, alpha=0.7)
 
+        agg_title = agg.capitalize() if agg.lower() != "median" else "CW Median"
+
         plt.plot(
             x,
             y,
@@ -280,7 +254,7 @@ def plot_cta_vs_pta_single_run_multi_aggregators(
             linewidth=2,
             markersize=7,
             markeredgecolor="black",
-            label=f"{agg.capitalize()} aggregation",
+            label=f"{agg_title} aggregation",
         )
 
     plt.xlabel("Poisoned Test Accuracy (%)", fontsize=13)
@@ -300,15 +274,10 @@ def plot_cta_vs_pta_single_run_multi_aggregators(
 
     plt.show()
 
-
-# ============================================================
-# Main
-# ============================================================
-
 if __name__ == "__main__":
 
     DATASET = "cifar"  # or "svhn"
-    AGGREGATORS = ["mean", "median", "trmean", "multikrum"]#, "krum"
+    AGGREGATORS = ["mean", "median", "trmean", "multikrum", "krum"]#, 
     BUDGETS = [150, 300, 500, 1000, 2000, 2500, 5000]
     RUNS = range(1, 11)
 
@@ -324,9 +293,6 @@ if __name__ == "__main__":
 
     os.makedirs(CSV_DIR, exist_ok=True)
 
-    # ==============================
-    # Collect mean/var per aggregator
-    # ==============================
     dfs_by_agg = {}
 
     for aggregator in AGGREGATORS:
@@ -347,7 +313,6 @@ if __name__ == "__main__":
 
         dfs_by_agg[aggregator] = df_mean
 
-        # Save CSV
         csv_path = os.path.join(
             CSV_DIR, f"{MODEL_FLAG}_{POISONER_FLAG}_{DATASET}_{aggregator}_cta_pta_mean_var.csv"
         )
@@ -382,9 +347,6 @@ if __name__ == "__main__":
                     save_path=f"./plots/{MODEL_FLAG}_{POISONER_FLAG}_{DATASET}_cta_vs_pta_run_{run}_agg_comparison.png",
                 )
 
-    # ==============================
-    # Single comparison plot
-    # ==============================
     plot_cta_vs_pta_multi_aggregators(
         dfs_by_agg,
         dataset=DATASET,

@@ -24,7 +24,7 @@ default_device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 DEFAULT_SGD_BATCH_SIZE = 256
 DEFAULT_SGD_EPOCHS = 200
 DEFAULT_SGD_KWARGS = {
-    'lr': 0.1,
+    'lr': 0.01,
     'momentum': 0.9,
     'nesterov': True,
     'weight_decay': 2e-4
@@ -72,8 +72,8 @@ def extract_toml(experiment_name, module_name=None):
  
 
 def load_model(model_flag, num_classes=10):
-    if num_classes != 10 and model_flag not in ['r32p', 'r18', 'r18-tin']:
-        raise NotImplementedError
+    # if num_classes != 10 and model_flag not in ['r32p', 'r18', 'r18-tin']:
+    #     raise NotImplementedError
 
     if model_flag == "r32p":
         import modules.base_utils.model.resnet as resnet

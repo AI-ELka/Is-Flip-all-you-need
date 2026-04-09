@@ -5,16 +5,57 @@ from pathlib import Path
 NUM_POISONED = 3
 NUM_CLEAN = 7
 ATTACK = "backdoor"
-DATASETS = ["cifar", "svhn"]
+DATASETS = ["cifar"] #, "svhn", "cifar_100", "tiny_imagenet
 POISONERS = ["1xs", "optimized", "4xl", "1xp"]
 INIT="stripe"
-MODEL_FLAG = "r32p"
+MODEL_FLAGS = ["r32p", "vit-pretrain"]
 AGGREGATORS = ["mean", "median", "krum", "trmean", "multikrum"]
-BUDGETS = [150, 300, 500, 1000, 1500, 2000, 2500, 5000]
-N_CYCLES = 10
+BUDGETS = [0, 150, 300, 500, 1000, 1500, 2000, 2500, 5000]
+N_CYCLES = 5
 GAMMA = 1.0
 
 BASE_DIR = Path("experiments/federated_experiments").resolve()
+
+LEARNING_RATE = {'r18': 0.1, 'r32p': 0.1, 'vgg': 0.01, 'vgg-pretrain': 0.01, 'vit-pretrain': 0.05}
+WEIGHT_DECAY = {'r18': 2e-4, 'r32p': 2e-4, 'vgg': 2e-4, 'vgg-pretrain': 2e-4, 'vit-pretrain': 5e-4}
+MILESTONE = {'r18': [75, 125], 'r32p': [75, 125], 'vgg': [125], 'vgg-pretrain': [125], 'vit-pretrain': [125]}
+
+OPT_TRIGGER_TEMPLATE = """[federated_optimizing_trigger]
+model = "{model_flag}"
+dataset = "{dataset}"
+source_label = 9
+target_label = 4
+
+lambda_match = 1.0
+lambda_adv = 1.0
+lambda_penalty = 1.0
+lambda_delta = 0.0
+
+epsilon = 1.0
+lr_delta = 1e-2
+n_steps = 50
+alpha_ckpt = 0.01
+num_chckpt = 5
+
+init = "{init}"
+
+expert_path = "/Data/mb/flip/out/checkpoints/{model_flag}_1xs/{{}}/model_{{}}_{{}}.pth"
+device = "cuda"
+optim_kwargs = {{lr = {lr}, momentum = 0.9, nesterov = true, weight_decay = {wd}}}
+schedule_kwargs = {{milestones = {milestones}, gamma = 0.1}}
+output_dir = "optimized_trigger"
+
+num_poisoned = {num_poisoned}
+num_honests = {num_clean}
+agg_method = "{aggregator}"
+
+[federated_optimizing_trigger.expert_config]
+experts = 1
+min = 0
+max = 20
+trajectories = [50, 100, 150, 200]
+
+"""
 
 GEN_LABEL_TEMPLATE = """# Module to train and record an expert trajectory.
 [train_expert]
@@ -28,6 +69,8 @@ poisoner = "{poisoner}"
 delta = "optimized_trigger/fed_opt_trig_{init}_{model_flag}_{dataset}_{aggregator}_{num_poisoned}vs{num_clean}.pt"
 epochs = 20
 checkpoint_iters = 50
+optim_kwargs = {{lr = {lr}, momentum = 0.9, nesterov = true, weight_decay = {wd}}}
+schedule_kwargs = {{milestones = {milestones}, gamma = 0.1}}
 
 # Module to generate attack labels from the expert trajectories.
 [federated_generate_labels]
@@ -59,6 +102,8 @@ iterations = 15
 one_hot_temp = 5
 alpha = 0
 label_kwargs = {{lr = 150, momentum = 0.5}}
+expert_kwargs = {{lr = {lr}, momentum = 0.9, nesterov = true, weight_decay = {wd}}}
+
 
 # Module to flip labels at the provided budgets.
 [federated_select_flips]
@@ -71,7 +116,7 @@ num_poisoned = {num_poisoned}
 """
 
 TRAIN_USER_TEMPLATE = """[federated_train_user]
-input_labels = "out/{model_flag}/{num_poisoned}vs{num_clean}/{dataset}/{attack}/{aggregator}/{poisoner}/{run_id}/"
+input_labels = "out/{model_flag}/{num_poisoned}vs{num_clean}/{dataset}/{attack}/mean/{poisoner}/{run_id}/"
 budget = {budget}
 user_model = "{model_flag}"
 trainer = "sgd"
@@ -86,6 +131,8 @@ alpha = 0.0
 num_honests = {num_clean}
 num_poisoned = {num_poisoned}
 agg_method = "{aggregator}"
+optim_kwargs = {{lr = {lr}, momentum = 0.9, nesterov = true, weight_decay = {wd}}}
+schedule_kwargs = {{milestones = {milestones}, gamma = 0.1}}
 """
 
 def write_config(path: Path, content: str):
@@ -94,41 +141,64 @@ def write_config(path: Path, content: str):
     print(f"[OK] Config written to {path}")
 
 def generate_all_configs():
-    for dataset in DATASETS:
-        for poisoner in POISONERS:
+    for model_flag in MODEL_FLAGS:
+        for dataset in DATASETS:
+            if dataset == "tiny_imagenet" and model_flag in ["r18", "r32p"]:
+                continue
             for aggregator in AGGREGATORS:
-                # Gen_label configs
-                for run_id in range(1, N_CYCLES + 1):
-                    gen_label_dir = BASE_DIR / f"{MODEL_FLAG}/{NUM_POISONED}vs{NUM_CLEAN}/{dataset}/{ATTACK}/{aggregator}/{poisoner}/gen_labels/{run_id}"
-                    gen_label_config = GEN_LABEL_TEMPLATE.format(
-                        dataset=dataset,
-                        model_flag=MODEL_FLAG,
-                        num_poisoned=NUM_POISONED,
-                        num_clean=NUM_CLEAN,
-                        attack=ATTACK,
-                        gamma=GAMMA,
-                        poisoner=poisoner,
-                        aggregator=aggregator,
-                        run_id=run_id,
-                        budgets=BUDGETS, 
-                        init=INIT
-                    )
-                    write_config(gen_label_dir / "config.toml", gen_label_config)
-                    for budget in BUDGETS:
-                        train_user_dir = BASE_DIR / f"{MODEL_FLAG}/{NUM_POISONED}vs{NUM_CLEAN}/{dataset}/{ATTACK}/{aggregator}/{poisoner}/train_user_{budget}/{run_id}"
-                        train_user_config = TRAIN_USER_TEMPLATE.format(
+                opt_dir = BASE_DIR / f"{model_flag}/{dataset}/{aggregator}/opt_trigger"
+                lr = LEARNING_RATE.get(model_flag, 0.1)
+                wd = WEIGHT_DECAY.get(model_flag, 2e-4)
+                opt_config = OPT_TRIGGER_TEMPLATE.format(
+                    model_flag=model_flag,
+                    dataset=dataset,
+                    aggregator=aggregator,
+                    num_poisoned=NUM_POISONED,
+                    num_clean=NUM_CLEAN,
+                    init=INIT,
+                    lr=lr,
+                    wd=wd,
+                    milestones=MILESTONE.get(model_flag, [75, 125]),
+                )
+                write_config(opt_dir / "config.toml", opt_config)
+                for poisoner in POISONERS:
+                    for run_id in range(1, N_CYCLES + 1):
+                        gen_label_dir = BASE_DIR / f"{model_flag}/{NUM_POISONED}vs{NUM_CLEAN}/{dataset}/{ATTACK}/{aggregator}/{poisoner}/gen_labels/{run_id}"
+                        gen_label_config = GEN_LABEL_TEMPLATE.format(
                             dataset=dataset,
-                            model_flag=MODEL_FLAG,
+                            model_flag=model_flag,
                             num_poisoned=NUM_POISONED,
                             num_clean=NUM_CLEAN,
                             attack=ATTACK,
-                            aggregator=aggregator,
+                            gamma=GAMMA,
                             poisoner=poisoner,
+                            aggregator=aggregator,
                             run_id=run_id,
-                            budget=budget,
-                            init=INIT
+                            budgets=BUDGETS, 
+                            init=INIT,
+                            lr=lr,
+                            wd=wd,
+                            milestones=MILESTONE.get(model_flag, [75, 125])
                         )
-                        write_config(train_user_dir / "config.toml", train_user_config)
+                        write_config(gen_label_dir / "config.toml", gen_label_config)
+                        for budget in BUDGETS:
+                            train_user_dir = BASE_DIR / f"{model_flag}/{NUM_POISONED}vs{NUM_CLEAN}/{dataset}/{ATTACK}/{aggregator}/{poisoner}/train_user_{budget}/{run_id}"
+                            train_user_config = TRAIN_USER_TEMPLATE.format(
+                                dataset=dataset,
+                                model_flag=model_flag,
+                                num_poisoned=NUM_POISONED,
+                                num_clean=NUM_CLEAN,
+                                attack=ATTACK,
+                                aggregator=aggregator,
+                                poisoner=poisoner,
+                                run_id=run_id,
+                                budget=budget,
+                                init=INIT,
+                                lr=lr,
+                                wd=wd,
+                                milestones=MILESTONE.get(model_flag, [75, 125])
+                            )
+                            write_config(train_user_dir / "config.toml", train_user_config)
 
 if __name__ == "__main__":
     generate_all_configs()

@@ -9,21 +9,202 @@ mkdir -p "$LOG_DIR"
 
 DATASET="cifar"
 ATTACK="backdoor"
-AGGREGATORS=("mean" "median" "krum" "trmean")
+
+AGGREGATORS=("mean" "median" "krum" "trmean" "multikrum")
+POISONERS=("1xs")
+
 BUDGETS=(150 300 500 1000 1500 2000 2500 5000)
-N_CYCLES=5
-NUM_CLEAN=6
-NUM_POISONED=4
+N_CYCLES=10
+
+NUM_CLEAN=7
+NUM_POISONED=3
 MODEL_FLAG="r32p"
-POISONER="1xs"
 
 MACHINES=(
-bentley bugatti cadillac chrysler corvette ferrari ford jaguar lada
-maserati nissan niva peugeot pontiac rolls rover
-royce simca skoda venturi volvo renault porsche fiat
+# Salle 30
+allemagne
+angleterre
+autriche
+belgique
+espagne
+finlande
+france
+groenland
+hollande
+hongrie
+irlande
+islande
+lituanie
+malte
+monaco
+pologne
+portugal
+roumanie
+suede
+# Salle 31
+albatros
+autruche
+bengali
+coucou
+dindon
+epervier
+faisan
+gelinotte
+hibou
+harpie
+jabiru
+kamiche
+linotte
+loriol
+mouette
+nandou
+ombrette
+perdrix
+quetzal
+quiscale
+rouloul
+sitelle
+traquet
+urabu
+verdier
+# Salle 32
+aerides
+barlia
+calanthe
+diuris
+encyclia
+epipactis
+gennaria
+habenaria
+isotria
+ipsea
+liparis
+lycaste
+malaxis
+neotinea
+oncidium
+ophrys
+orchis
+pleione
+pogonia
+serapias
+telipogon
+vanda
+vanilla
+xylobium
+zeuxine
+# Salle 33
+ain
+allier
+ardennes
+carmor
+charente
+cher
+creuse
+dordogne
+doubs
+essonne
+finistere
+gironde
+indre
+jura
+landes
+loire
+manche
+marne
+mayenne
+morbihan
+moselle
+saone
+somme
+vendee
+vosges
+# Salle 34
+ablette
+anchois
+anguille
+barbeau
+barbue
+baudroie
+brochet
+carrelet
+gardon
+gymnote
+labre
+lieu
+lotte
+mulet
+murene
+piranha
+raie
+requin
+rouget
+roussette
+saumon
+silure
+sole
+thon
+truite
+# Salle 35
+acromion
+apophyse
+astragale
+atlas
+axis
+coccyx
+cote
+cubitus
+cuboide
+femur
+frontal
+humerus
+malleole
+metacarpe
+parietal
+perone
+phalange
+radius
+rotule
+sacrum
+sternum
+tarse
+temporal
+tibia
+xiphoide
+# Salle 36
+#bentley
+#bugatti
+#cadillac
+#chrysler
+corvette
+ferrari
+fiat
+ford
+jaguar
+lada
+maserati
+mazda
+nissan
+niva
+peugeot
+pontiac
+porsche
+renault
+rolls
+rover
+royce
+simca
+skoda
+venturi
+volvo
 )
+#bentley bugatti cadillac chrysler
 
 N_MACHINES=${#MACHINES[@]}
+
+# ==========================================================
+# REMOTE LAUNCHER
+# ==========================================================
 
 run_remote() {
     local machine=$1
@@ -39,121 +220,156 @@ run_remote() {
     "
 }
 
-wait_for_done_files() {
-    local files=("$@")
-    echo "[WAIT] Waiting for jobs to finish..."
-    while true; do
-        all_done=true
-        for f in "${files[@]}"; do
-            [ ! -f "$f" ] && all_done=false && break
-        done
-        $all_done && break
-        sleep 10
-    done
-    echo "[DONE] Phase completed"
-}
+# ==========================================================
+# POOL EXECUTOR
+# ==========================================================
 
-echo "Cleaning previous logs and done files..."
-rm -f "$LOG_DIR"/*.log "$LOG_DIR"/*.done || true
+run_job_pool() {
+    local -n JOBS=$1   # array reference
+    local PHASE=$2
 
-for aggregator in "${AGGREGATORS[@]}"; do
-    echo "========================================"
-    echo "AGGREGATOR: $aggregator"
-    echo "========================================"
-
-    echo "1 - gen_labels"
-
-    DONE_FILES=()
-    JOB_ID=0
-
-    for ((run_id=1; run_id<=N_CYCLES; run_id++)); do
-        machine=${MACHINES[$((JOB_ID % N_MACHINES))]}
-
-        config="federated_experiments/${MODEL_FLAG}/${NUM_POISONED}vs${NUM_CLEAN}/${DATASET}/${ATTACK}/${aggregator}/${POISONER}/gen_labels/${run_id}"
-
-        safe_name="gen_${MODEL_FLAG}_${NUM_POISONED}vs${NUM_CLEAN}_${DATASET}_${ATTACK}_${aggregator}_${POISONER}_${run_id}_${machine}"
-        done_file="$LOG_DIR/${safe_name}.done"
-        log_file="$LOG_DIR/${safe_name}.log"
-        rm -f "$done_file"
-
-        run_remote "$machine" "python run_experiment.py $config" "$done_file" "$log_file" &
-
-        DONE_FILES+=("$done_file")
-        JOB_ID=$((JOB_ID + 1))
-    done
-
-    wait_for_done_files "${DONE_FILES[@]}"
-    echo "gen_labels done"
-
-    echo "2 - train_user"
-
-    JOBS=()
-    for ((run_id=1; run_id<=N_CYCLES; run_id++)); do
-        for budget in "${BUDGETS[@]}"; do
-            JOBS+=("$run_id|$budget")
-        done
-    done
-
-    TOTAL_JOBS=${#JOBS[@]}
-    INDEX=0
-
-    echo "Total jobs: $TOTAL_JOBS"
+    local TOTAL=${#JOBS[@]}
+    local INDEX=0
 
     declare -a running
-    for ((i=0; i<N_MACHINES; i++)); do running[i]=""; done
+    for ((i=0;i<N_MACHINES;i++)); do running[i]=""; done
+
+    echo "[POOL $PHASE] total jobs = $TOTAL"
 
     while true; do
 
-        # Assign jobs to free machines
-        for ((i=0; i<N_MACHINES; i++)); do
+        # -----------------------------------------
+        # assign jobs to free machines
+        # -----------------------------------------
+        for ((i=0;i<N_MACHINES;i++)); do
+            if [ -z "${running[i]:-}" ] && [ $INDEX -lt $TOTAL ]; then
 
-            # If machine is not running and there are still jobs to run
-            if [ -z "${running[i]:-}" ] && [ $INDEX -lt $TOTAL_JOBS ]; then
-                IFS='|' read -r run_id budget <<< "${JOBS[$INDEX]}"
                 machine=${MACHINES[$i]}
+                job="${JOBS[$INDEX]}"
 
-                config="federated_experiments/${MODEL_FLAG}/${NUM_POISONED}vs${NUM_CLEAN}/${DATASET}/${ATTACK}/${aggregator}/${POISONER}/train_user_${budget}/${run_id}"
+                IFS='|' read -r cmd safe_name <<< "$job"
 
-                safe_name="${MODEL_FLAG}_${NUM_POISONED}vs${NUM_CLEAN}_${DATASET}_${ATTACK}_${aggregator}_${POISONER}_${run_id}_${machine}"
                 done_file="$LOG_DIR/${safe_name}.done"
                 log_file="$LOG_DIR/${safe_name}.log"
+
                 rm -f "$done_file"
 
-                run_remote "$machine" "python run_experiment.py $config" "$done_file" "$log_file" &
+                run_remote "$machine" "$cmd" "$done_file" "$log_file"
+
                 running[i]=$done_file
                 INDEX=$((INDEX + 1))
-                echo "[POOL] $machine ← job $INDEX/$TOTAL_JOBS"
+
+                echo "[POOL $PHASE] $machine ← job $INDEX / $TOTAL"
             fi
         done
 
-
-        # Break the loop if all machines are idle and there are no more jobs to run
+        # -----------------------------------------
+        # check if finished
+        # -----------------------------------------
         all_idle=true
-        for ((i=0; i<N_MACHINES; i++)); do
+        for ((i=0;i<N_MACHINES;i++)); do
             [ -n "${running[i]:-}" ] && all_idle=false && break
         done
-        if $all_idle && [ $INDEX -ge $TOTAL_JOBS ]; then
+
+        if $all_idle && [ $INDEX -ge $TOTAL ]; then
             break
         fi
 
-        # Wait at least one machine to finish, then asing a new job
+        # -----------------------------------------
+        # wait one job completion
+        # -----------------------------------------
         while true; do
-            for ((i=0; i<N_MACHINES; i++)); do
+            for ((i=0;i<N_MACHINES;i++)); do
                 if [ -n "${running[i]:-}" ] && [ -f "${running[i]}" ]; then
                     running[i]=""
+                    rm -f "$LOG_DIR"/*.log  # nettoyage progressif
                     break 2
                 fi
             done
             sleep 5
         done
-
     done
 
-    echo "train_user all runs done"
+    echo "[POOL $PHASE] completed"
+}
 
-    echo "Cleaning previous logs and done files..."
-    rm -f "$LOG_DIR"/*.log "$LOG_DIR"/*.done || true
+# ==========================================================
+# CLEAN START
+# ==========================================================
+
+rm -f "$LOG_DIR"/*.log "$LOG_DIR"/*.done || true
+
+
+# ==========================================================
+# BUILD GEN JOBS (GLOBAL)
+# ==========================================================
+
+GEN_JOBS=()
+
+for poisoner in "${POISONERS[@]}"; do
+for aggregator in "${AGGREGATORS[@]}"; do
+for ((run_id=1; run_id<=N_CYCLES; run_id++)); do
+
+config="federated_experiments/${MODEL_FLAG}/${NUM_POISONED}vs${NUM_CLEAN}/${DATASET}/${ATTACK}/${aggregator}/${poisoner}/gen_labels/${run_id}"
+
+safe="gen_${MODEL_FLAG}_${NUM_POISONED}vs${NUM_CLEAN}_${DATASET}_${ATTACK}_${aggregator}_${poisoner}_${run_id}"
+
+cmd="python run_experiment.py $config"
+
+GEN_JOBS+=("$cmd|$safe")
 
 done
+done
+done
 
+
+# ==========================================================
+# RUN GEN POOL
+# ==========================================================
+
+echo "=============================="
+echo "GEN_LABELS GLOBAL POOL"
+echo "=============================="
+
+run_job_pool GEN_JOBS GEN
+
+
+# ==========================================================
+# BUILD TRAIN JOBS (GLOBAL)
+# ==========================================================
+
+TRAIN_JOBS=()
+
+for poisoner in "${POISONERS[@]}"; do
+for aggregator in "${AGGREGATORS[@]}"; do
+for ((run_id=1; run_id<=N_CYCLES; run_id++)); do
+for budget in "${BUDGETS[@]}"; do
+
+config="federated_experiments/${MODEL_FLAG}/${NUM_POISONED}vs${NUM_CLEAN}/${DATASET}/${ATTACK}/${aggregator}/${poisoner}/train_user_${budget}/${run_id}"
+
+safe="train_${MODEL_FLAG}_${NUM_POISONED}vs${NUM_CLEAN}_${DATASET}_${ATTACK}_${aggregator}_${poisoner}_${budget}_${run_id}"
+
+cmd="python run_experiment.py $config"
+
+TRAIN_JOBS+=("$cmd|$safe")
+
+done
+done
+done
+done
+
+
+# ==========================================================
+# RUN TRAIN POOL
+# ==========================================================
+
+echo "=============================="
+echo "TRAIN_USER GLOBAL POOL"
+echo "=============================="
+
+run_job_pool TRAIN_JOBS TRAIN
+
+
+echo "=============================="
 echo "ALL DONE"
+echo "=============================="
